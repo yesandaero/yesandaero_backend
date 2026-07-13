@@ -1,5 +1,7 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
+import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
@@ -96,6 +98,30 @@ class StoreService(
         )
 
         return buildDetailResponse(store, lat = null, lng = null)
+    }
+
+    @Transactional
+    fun replaceMenus(ownerUserId: Long, storeId: Long, request: MenuBulkUpdateRequest): MenuBulkUpdateResponse {
+        val store = storeRepository.findById(storeId).orElseThrow { StoreNotFoundException() }
+        if (store.ownerUserId != ownerUserId) {
+            throw NotStoreOwnerException()
+        }
+
+        menuRepository.deleteAllByStoreId(storeId)
+
+        val newMenus = request.menus.mapIndexed { index, menuRequest ->
+            Menu(
+                store = store,
+                name = menuRequest.name,
+                description = menuRequest.description,
+                price = menuRequest.price,
+                discountedPrice = menuRequest.discountedPrice,
+                displayOrder = index,
+            )
+        }
+        val saved = if (newMenus.isNotEmpty()) menuRepository.saveAll(newMenus) else emptyList()
+
+        return MenuBulkUpdateResponse(menus = saved.map(MenuResponse::from))
     }
 
     private fun buildDetailResponse(store: Store, lat: Double?, lng: Double?): StoreDetailResponse {

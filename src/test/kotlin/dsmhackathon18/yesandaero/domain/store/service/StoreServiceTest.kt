@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
@@ -208,6 +209,69 @@ class StoreServiceTest {
         closeTime = null,
         minOrderAmount = minOrderAmount,
     )
+
+    @Test
+    fun `존재하지 않는 가게의 메뉴를 수정하면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findById(999L) } returns Optional.empty()
+
+        assertFailsWith<StoreNotFoundException> {
+            storeService.replaceMenus(1L, 999L, MenuBulkUpdateRequest(emptyList()))
+        }
+    }
+
+    @Test
+    fun `본인 가게가 아닌 가게의 메뉴를 수정하면 NotStoreOwnerException이 발생한다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+
+        assertFailsWith<NotStoreOwnerException> {
+            storeService.replaceMenus(2L, 10L, MenuBulkUpdateRequest(emptyList()))
+        }
+
+        verify(exactly = 0) { menuRepository.deleteAllByStoreId(any()) }
+    }
+
+    @Test
+    fun `메뉴 전체 교체 시 기존 메뉴를 삭제하고 요청 순서대로 display_order를 부여해 저장한다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+        every { menuRepository.deleteAllByStoreId(10L) } returns Unit
+        val savedMenus = slot<List<Menu>>()
+        every { menuRepository.saveAll(capture(savedMenus)) } answers {
+            savedMenus.captured.forEachIndexed { index, menu ->
+                ReflectionTestUtils.setField(menu, "id", (index + 1).toLong())
+            }
+            savedMenus.captured
+        }
+
+        val request = MenuBulkUpdateRequest(
+            listOf(
+                MenuRequest("제육볶음", "매콤한 제육", 9000, 8000),
+                MenuRequest("된장찌개", "집된장 사용", 8000, null),
+            ),
+        )
+
+        val response = storeService.replaceMenus(1L, 10L, request)
+
+        verify { menuRepository.deleteAllByStoreId(10L) }
+        assertEquals(2, savedMenus.captured.size)
+        assertEquals(0, savedMenus.captured[0].displayOrder)
+        assertEquals(1, savedMenus.captured[1].displayOrder)
+        assertEquals(2, response.menus.size)
+    }
+
+    @Test
+    fun `빈 메뉴 목록으로 교체하면 기존 메뉴만 삭제되고 저장은 호출되지 않는다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+        every { menuRepository.deleteAllByStoreId(10L) } returns Unit
+
+        val response = storeService.replaceMenus(1L, 10L, MenuBulkUpdateRequest(emptyList()))
+
+        verify { menuRepository.deleteAllByStoreId(10L) }
+        verify(exactly = 0) { menuRepository.saveAll(any<List<Menu>>()) }
+        assertEquals(0, response.menus.size)
+    }
 
     private fun existingStore(): Store =
         Store(

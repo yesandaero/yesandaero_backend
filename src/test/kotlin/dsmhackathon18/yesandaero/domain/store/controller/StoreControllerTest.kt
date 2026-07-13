@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.controller
 
+import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
@@ -12,6 +13,7 @@ import dsmhackathon18.yesandaero.domain.store.service.StoreService
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
 import io.mockk.mockk
+import org.hamcrest.Matchers.nullValue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -25,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -221,5 +224,62 @@ class StoreControllerTest {
         )
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.code").value("STR_404"))
+    }
+
+    @Test
+    fun `메뉴 일괄 수정에 성공하면 200과 교체된 메뉴 목록을 반환한다`() {
+        every { storeService.replaceMenus(1L, 10L, any()) } returns MenuBulkUpdateResponse(
+            menus = listOf(
+                MenuResponse(1L, "제육볶음", "매콤한 제육", 9000, 8000),
+                MenuResponse(2L, "된장찌개", "집된장 사용", 8000, null),
+            ),
+        )
+
+        mockMvc.perform(
+            put("/stores/10/menus")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "menus": [
+                        { "name": "제육볶음", "description": "매콤한 제육", "price": 9000, "discountedPrice": 8000 },
+                        { "name": "된장찌개", "description": "집된장 사용", "price": 8000, "discountedPrice": null }
+                      ]
+                    }
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.menus.length()").value(2))
+            .andExpect(jsonPath("$.menus[0].menuId").value(1))
+            .andExpect(jsonPath("$.menus[1].discountedPrice").value(nullValue()))
+    }
+
+    @Test
+    fun `할인가가 정가보다 크면 메뉴 일괄 수정 시 400과 GLB_400을 반환한다`() {
+        mockMvc.perform(
+            put("/stores/10/menus")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    { "menus": [ { "name": "제육볶음", "price": 9000, "discountedPrice": 10000 } ] }
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("GLB_400"))
+    }
+
+    @Test
+    fun `본인 가게가 아닌 가게의 메뉴를 수정하면 403과 STR_403을 반환한다`() {
+        every { storeService.replaceMenus(1L, 10L, any()) } throws NotStoreOwnerException()
+
+        mockMvc.perform(
+            put("/stores/10/menus")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"menus": []}"""),
+        )
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("STR_403"))
     }
 }

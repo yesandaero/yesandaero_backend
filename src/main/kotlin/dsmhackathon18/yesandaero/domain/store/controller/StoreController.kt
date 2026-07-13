@@ -1,5 +1,7 @@
 package dsmhackathon18.yesandaero.domain.store.controller
 
+import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
+import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -52,4 +55,12 @@ class StoreController(
         @PathVariable storeId: Long,
         @Valid @RequestBody request: StoreUpdateRequest,
     ): StoreDetailResponse = storeService.updateStore(ownerUserId, storeId, request)
+
+    @PutMapping("/{storeId}/menus")
+    @PreAuthorize("hasRole('OWNER')")
+    fun replaceMenus(
+        @AuthenticationPrincipal ownerUserId: Long,
+        @PathVariable storeId: Long,
+        @Valid @RequestBody request: MenuBulkUpdateRequest,
+    ): MenuBulkUpdateResponse = storeService.replaceMenus(ownerUserId, storeId, request)
 }
