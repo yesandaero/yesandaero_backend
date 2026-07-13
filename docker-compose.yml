@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: yesandaero-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yesandaero}
+      POSTGRES_USER: ${POSTGRES_USER:-yesandaero}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yesandaero}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yesandaero} -d ${POSTGRES_DB:-yesandaero}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - yesandaero-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: yesandaero-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-yesandaero}"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-yesandaero}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - yesandaero-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  yesandaero-net:
+    driver: bridge
