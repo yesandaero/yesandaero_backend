@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
@@ -123,6 +124,8 @@ class StoreService(
 
         return MenuBulkUpdateResponse(menus = saved.map(MenuResponse::from))
     }
+
+    fun getCategories(): CategoryListResponse = CategoryListResponse.all()
 
     private fun buildDetailResponse(store: Store, lat: Double?, lng: Double?): StoreDetailResponse {
         val menus = menuRepository.findByStoreIdOrderByDisplayOrderAsc(requireNotNull(store.id))

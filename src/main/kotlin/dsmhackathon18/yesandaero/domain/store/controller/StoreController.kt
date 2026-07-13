@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.controller
 
+import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
@@ -40,6 +41,9 @@ class StoreController(
     @PreAuthorize("hasRole('OWNER')")
     fun getMyStore(@AuthenticationPrincipal ownerUserId: Long): StoreDetailResponse =
         storeService.getMyStore(ownerUserId)
+
+    @GetMapping("/categories")
+    fun getCategories(): CategoryListResponse = storeService.getCategories()
 
     @GetMapping("/{storeId}")
     fun getStoreDetail(

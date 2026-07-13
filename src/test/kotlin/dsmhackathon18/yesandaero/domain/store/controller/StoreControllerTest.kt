@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.controller
 
+import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
@@ -281,5 +282,16 @@ class StoreControllerTest {
         )
             .andExpect(status().isForbidden)
             .andExpect(jsonPath("$.code").value("STR_403"))
+    }
+
+    @Test
+    fun `카테고리 목록 조회에 성공하면 200과 카테고리 목록을 반환한다`() {
+        every { storeService.getCategories() } returns CategoryListResponse.all()
+
+        mockMvc.perform(get("/stores/categories"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.categories.length()").value(6))
+            .andExpect(jsonPath("$.categories[0].code").value("KOREAN"))
+            .andExpect(jsonPath("$.categories[0].label").value("한식"))
     }
 }

@@ -273,6 +273,18 @@ class StoreServiceTest {
         assertEquals(0, response.menus.size)
     }
 
+    @Test
+    fun `카테고리 목록을 조회하면 6개 카테고리를 코드와 한글 라벨로 반환한다`() {
+        val response = storeService.getCategories()
+
+        assertEquals(6, response.categories.size)
+        assertEquals(
+            listOf("KOREAN", "CHINESE", "JAPANESE", "WESTERN", "SNACK", "CAFE"),
+            response.categories.map { it.code },
+        )
+        assertEquals("한식", response.categories.first { it.code == "KOREAN" }.label)
+    }
+
     private fun existingStore(): Store =
         Store(
             ownerUserId = 1L,
