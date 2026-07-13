@@ -95,6 +95,15 @@ class AuthServiceTest {
         verify { refreshTokenRepository.save(1L, "refresh-token", Duration.ofDays(14)) }
     }
 
+    @Test
+    fun `로그아웃하면 Redis에 저장된 refreshToken을 삭제한다`() {
+        every { refreshTokenRepository.delete(1L) } returns Unit
+
+        authService.logout(1L)
+
+        verify { refreshTokenRepository.delete(1L) }
+    }
+
     private fun existingUser(): User =
         User(
             username = "kimsiheun",

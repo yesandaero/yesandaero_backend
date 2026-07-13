@@ -11,9 +11,15 @@ import dsmhackathon18.yesandaero.domain.user.exception.LoginFailedException
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -29,7 +35,13 @@ class AuthControllerTest {
     fun setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(AuthController(authService))
             .setControllerAdvice(GlobalExceptionHandler())
+            .setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
             .build()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        SecurityContextHolder.clearContext()
     }
 
     @Test
@@ -123,5 +135,18 @@ class AuthControllerTest {
         )
             .andExpect(status().isUnauthorized)
             .andExpect(jsonPath("$.code").value("USR_401"))
+    }
+
+    @Test
+    fun `로그아웃에 성공하면 204를 반환한다`() {
+        every { authService.logout(1L) } returns Unit
+        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(
+            1L, null, listOf(SimpleGrantedAuthority("ROLE_CUSTOMER")),
+        )
+
+        mockMvc.perform(post("/auth/logout"))
+            .andExpect(status().isNoContent)
+
+        verify { authService.logout(1L) }
     }
 }
