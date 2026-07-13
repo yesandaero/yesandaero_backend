@@ -2,6 +2,8 @@ package dsmhackathon18.yesandaero.domain.auth.controller
 
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginResponse
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshRequest
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshResponse
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupResponse
 import dsmhackathon18.yesandaero.domain.auth.service.AuthService
@@ -34,4 +36,8 @@ class AuthController(
     fun logout(@AuthenticationPrincipal userId: Long) {
         authService.logout(userId)
     }
+
+    @PostMapping("/refresh")
+    fun refresh(@Valid @RequestBody request: RefreshRequest): RefreshResponse =
+        authService.refresh(request)
 }

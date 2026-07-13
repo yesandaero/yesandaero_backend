@@ -1,6 +1,7 @@
 package dsmhackathon18.yesandaero.domain.auth.service
 
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.user.entity.Role
 import dsmhackathon18.yesandaero.domain.user.entity.User
@@ -9,6 +10,7 @@ import dsmhackathon18.yesandaero.domain.user.exception.LoginFailedException
 import dsmhackathon18.yesandaero.domain.user.repository.UserRepository
 import dsmhackathon18.yesandaero.global.jwt.JwtTokenProvider
 import dsmhackathon18.yesandaero.global.jwt.RefreshTokenRepository
+import dsmhackathon18.yesandaero.global.jwt.exception.ExpiredOrInvalidTokenException
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.util.ReflectionTestUtils
 import java.time.Duration
+import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -102,6 +105,44 @@ class AuthServiceTest {
         authService.logout(1L)
 
         verify { refreshTokenRepository.delete(1L) }
+    }
+
+    @Test
+    fun `저장된 refreshToken이 없으면 ExpiredOrInvalidTokenException이 발생한다`() {
+        every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
+        every { refreshTokenRepository.find(1L) } returns null
+
+        assertFailsWith<ExpiredOrInvalidTokenException> {
+            authService.refresh(RefreshRequest("refresh-token"))
+        }
+    }
+
+    @Test
+    fun `저장된 refreshToken과 요청 값이 다르면 ExpiredOrInvalidTokenException이 발생한다`() {
+        every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
+        every { refreshTokenRepository.find(1L) } returns "other-token"
+
+        assertFailsWith<ExpiredOrInvalidTokenException> {
+            authService.refresh(RefreshRequest("refresh-token"))
+        }
+    }
+
+    @Test
+    fun `토큰 재발급에 성공하면 accessToken과 refreshToken을 새로 발급하고 회전한다`() {
+        val user = existingUser()
+        every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
+        every { refreshTokenRepository.find(1L) } returns "refresh-token"
+        every { userRepository.findById(1L) } returns Optional.of(user)
+        every { jwtTokenProvider.generateAccessToken(1L, Role.CUSTOMER) } returns "new-access-token"
+        every { jwtTokenProvider.generateRefreshToken(1L) } returns "new-refresh-token"
+        every { jwtTokenProvider.refreshTokenTtl } returns Duration.ofDays(14)
+        every { refreshTokenRepository.save(1L, "new-refresh-token", Duration.ofDays(14)) } returns Unit
+
+        val response = authService.refresh(RefreshRequest("refresh-token"))
+
+        assertEquals("new-access-token", response.accessToken)
+        assertEquals("new-refresh-token", response.refreshToken)
+        verify { refreshTokenRepository.save(1L, "new-refresh-token", Duration.ofDays(14)) }
     }
 
     private fun existingUser(): User =

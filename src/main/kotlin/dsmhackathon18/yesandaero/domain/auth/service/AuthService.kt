@@ -2,6 +2,8 @@ package dsmhackathon18.yesandaero.domain.auth.service
 
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginResponse
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshRequest
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshResponse
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupResponse
 import dsmhackathon18.yesandaero.domain.user.entity.User
@@ -10,6 +12,7 @@ import dsmhackathon18.yesandaero.domain.user.exception.LoginFailedException
 import dsmhackathon18.yesandaero.domain.user.repository.UserRepository
 import dsmhackathon18.yesandaero.global.jwt.JwtTokenProvider
 import dsmhackathon18.yesandaero.global.jwt.RefreshTokenRepository
+import dsmhackathon18.yesandaero.global.jwt.exception.ExpiredOrInvalidTokenException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -56,5 +59,21 @@ class AuthService(
 
     fun logout(userId: Long) {
         refreshTokenRepository.delete(userId)
+    }
+
+    @Transactional(readOnly = true)
+    fun refresh(request: RefreshRequest): RefreshResponse {
+        val userId = jwtTokenProvider.getUserId(request.refreshToken)
+        val storedRefreshToken = refreshTokenRepository.find(userId)
+        if (storedRefreshToken == null || storedRefreshToken != request.refreshToken) {
+            throw ExpiredOrInvalidTokenException()
+        }
+
+        val user = userRepository.findById(userId).orElseThrow { ExpiredOrInvalidTokenException() }
+        val newAccessToken = jwtTokenProvider.generateAccessToken(userId, user.role)
+        val newRefreshToken = jwtTokenProvider.generateRefreshToken(userId)
+        refreshTokenRepository.save(userId, newRefreshToken, jwtTokenProvider.refreshTokenTtl)
+
+        return RefreshResponse(accessToken = newAccessToken, refreshToken = newRefreshToken)
     }
 }

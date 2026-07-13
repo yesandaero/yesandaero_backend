@@ -2,6 +2,8 @@ package dsmhackathon18.yesandaero.domain.auth.controller
 
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.LoginResponse
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshRequest
+import dsmhackathon18.yesandaero.domain.auth.dto.RefreshResponse
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupResponse
 import dsmhackathon18.yesandaero.domain.auth.service.AuthService
@@ -9,6 +11,7 @@ import dsmhackathon18.yesandaero.domain.user.entity.Role
 import dsmhackathon18.yesandaero.domain.user.exception.DuplicateEmailException
 import dsmhackathon18.yesandaero.domain.user.exception.LoginFailedException
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
+import dsmhackathon18.yesandaero.global.jwt.exception.ExpiredOrInvalidTokenException
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -148,5 +151,44 @@ class AuthControllerTest {
             .andExpect(status().isNoContent)
 
         verify { authService.logout(1L) }
+    }
+
+    @Test
+    fun `토큰 재발급에 성공하면 200과 새 토큰을 반환한다`() {
+        every {
+            authService.refresh(RefreshRequest("refresh-token"))
+        } returns RefreshResponse("new-access-token", "new-refresh-token")
+
+        mockMvc.perform(
+            post("/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"refreshToken":"refresh-token"}
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.accessToken").value("new-access-token"))
+            .andExpect(jsonPath("$.refreshToken").value("new-refresh-token"))
+    }
+
+    @Test
+    fun `refreshToken이 만료되었거나 위조되면 401과 JWT_401을 반환한다`() {
+        every {
+            authService.refresh(RefreshRequest("invalid-token"))
+        } throws ExpiredOrInvalidTokenException()
+
+        mockMvc.perform(
+            post("/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"refreshToken":"invalid-token"}
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.code").value("JWT_401"))
     }
 }
