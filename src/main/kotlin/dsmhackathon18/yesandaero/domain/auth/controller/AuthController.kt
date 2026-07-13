@@ -1,5 +1,7 @@
 package dsmhackathon18.yesandaero.domain.auth.controller
 
+import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
+import dsmhackathon18.yesandaero.domain.auth.dto.LoginResponse
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupResponse
 import dsmhackathon18.yesandaero.domain.auth.service.AuthService
@@ -21,4 +23,8 @@ class AuthController(
     @ResponseStatus(HttpStatus.CREATED)
     fun signup(@Valid @RequestBody request: SignupRequest): SignupResponse =
         authService.signup(request)
+
+    @PostMapping("/login")
+    fun login(@Valid @RequestBody request: LoginRequest): LoginResponse =
+        authService.login(request)
 }

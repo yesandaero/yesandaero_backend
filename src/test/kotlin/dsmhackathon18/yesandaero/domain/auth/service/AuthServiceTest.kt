@@ -1,10 +1,14 @@
 package dsmhackathon18.yesandaero.domain.auth.service
 
+import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.user.entity.Role
 import dsmhackathon18.yesandaero.domain.user.entity.User
 import dsmhackathon18.yesandaero.domain.user.exception.DuplicateEmailException
+import dsmhackathon18.yesandaero.domain.user.exception.LoginFailedException
 import dsmhackathon18.yesandaero.domain.user.repository.UserRepository
+import dsmhackathon18.yesandaero.global.jwt.JwtTokenProvider
+import dsmhackathon18.yesandaero.global.jwt.RefreshTokenRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -12,6 +16,7 @@ import io.mockk.verify
 import org.junit.jupiter.api.Test
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.util.ReflectionTestUtils
+import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -19,7 +24,9 @@ class AuthServiceTest {
 
     private val userRepository = mockk<UserRepository>()
     private val passwordEncoder = mockk<PasswordEncoder>()
-    private val authService = AuthService(userRepository, passwordEncoder)
+    private val jwtTokenProvider = mockk<JwtTokenProvider>()
+    private val refreshTokenRepository = mockk<RefreshTokenRepository>()
+    private val authService = AuthService(userRepository, passwordEncoder, jwtTokenProvider, refreshTokenRepository)
 
     @Test
     fun `이미 가입된 이메일로 회원가입하면 DuplicateEmailException이 발생한다`() {
@@ -49,4 +56,50 @@ class AuthServiceTest {
         assertEquals("user@example.com", savedUser.captured.email)
         assertEquals(Role.CUSTOMER, savedUser.captured.role)
     }
+
+    @Test
+    fun `존재하지 않는 이메일로 로그인하면 LoginFailedException이 발생한다`() {
+        every { userRepository.findByEmail("user@example.com") } returns null
+
+        assertFailsWith<LoginFailedException> {
+            authService.login(LoginRequest("user@example.com", "P@ssw0rd!"))
+        }
+    }
+
+    @Test
+    fun `비밀번호가 일치하지 않으면 LoginFailedException이 발생한다`() {
+        val user = existingUser()
+        every { userRepository.findByEmail("user@example.com") } returns user
+        every { passwordEncoder.matches("wrong-password", "encoded-password") } returns false
+
+        assertFailsWith<LoginFailedException> {
+            authService.login(LoginRequest("user@example.com", "wrong-password"))
+        }
+    }
+
+    @Test
+    fun `로그인에 성공하면 accessToken과 refreshToken을 발급하고 refreshToken을 Redis에 저장한다`() {
+        val user = existingUser()
+        every { userRepository.findByEmail("user@example.com") } returns user
+        every { passwordEncoder.matches("P@ssw0rd!", "encoded-password") } returns true
+        every { jwtTokenProvider.generateAccessToken(1L, Role.CUSTOMER) } returns "access-token"
+        every { jwtTokenProvider.generateRefreshToken(1L) } returns "refresh-token"
+        every { jwtTokenProvider.refreshTokenTtl } returns Duration.ofDays(14)
+        every { refreshTokenRepository.save(1L, "refresh-token", Duration.ofDays(14)) } returns Unit
+
+        val response = authService.login(LoginRequest("user@example.com", "P@ssw0rd!"))
+
+        assertEquals("access-token", response.accessToken)
+        assertEquals("refresh-token", response.refreshToken)
+        assertEquals(Role.CUSTOMER, response.role)
+        verify { refreshTokenRepository.save(1L, "refresh-token", Duration.ofDays(14)) }
+    }
+
+    private fun existingUser(): User =
+        User(
+            username = "kimsiheun",
+            passwordHash = "encoded-password",
+            email = "user@example.com",
+            role = Role.CUSTOMER,
+        ).also { ReflectionTestUtils.setField(it, "id", 1L) }
 }

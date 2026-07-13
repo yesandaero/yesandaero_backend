@@ -1,10 +1,13 @@
 package dsmhackathon18.yesandaero.domain.auth.controller
 
+import dsmhackathon18.yesandaero.domain.auth.dto.LoginRequest
+import dsmhackathon18.yesandaero.domain.auth.dto.LoginResponse
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupRequest
 import dsmhackathon18.yesandaero.domain.auth.dto.SignupResponse
 import dsmhackathon18.yesandaero.domain.auth.service.AuthService
 import dsmhackathon18.yesandaero.domain.user.entity.Role
 import dsmhackathon18.yesandaero.domain.user.exception.DuplicateEmailException
+import dsmhackathon18.yesandaero.domain.user.exception.LoginFailedException
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
 import io.mockk.mockk
@@ -80,5 +83,45 @@ class AuthControllerTest {
         )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("GLB_400"))
+    }
+
+    @Test
+    fun `로그인에 성공하면 200과 토큰을 반환한다`() {
+        every {
+            authService.login(LoginRequest("user@example.com", "P@ssw0rd!"))
+        } returns LoginResponse("access-token", "refresh-token", Role.CUSTOMER)
+
+        mockMvc.perform(
+            post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"email":"user@example.com","password":"P@ssw0rd!"}
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.accessToken").value("access-token"))
+            .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
+            .andExpect(jsonPath("$.role").value("CUSTOMER"))
+    }
+
+    @Test
+    fun `이메일 또는 비밀번호가 일치하지 않으면 401과 USR_401을 반환한다`() {
+        every {
+            authService.login(LoginRequest("user@example.com", "wrong-password"))
+        } throws LoginFailedException()
+
+        mockMvc.perform(
+            post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"email":"user@example.com","password":"wrong-password"}
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.code").value("USR_401"))
     }
 }

@@ -10,6 +10,7 @@ import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.MalformedJwtException
 import io.jsonwebtoken.security.Keys
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.util.Date
 import javax.crypto.SecretKey
 
@@ -21,6 +22,8 @@ class JwtTokenProvider(
     private val key: SecretKey = Keys.hmacShaKeyFor(jwtProperties.secret.toByteArray())
     private val accessTokenExpiration = jwtProperties.accessTokenExpiration
     private val refreshTokenExpiration = jwtProperties.refreshTokenExpiration
+
+    val refreshTokenTtl: Duration = Duration.ofMillis(refreshTokenExpiration)
 
     fun generateAccessToken(userId: Long, role: Role): String {
         val now = Date()
