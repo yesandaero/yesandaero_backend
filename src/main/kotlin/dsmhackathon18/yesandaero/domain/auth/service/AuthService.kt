@@ -64,15 +64,19 @@ class AuthService(
     @Transactional(readOnly = true)
     fun refresh(request: RefreshRequest): RefreshResponse {
         val userId = jwtTokenProvider.getUserId(request.refreshToken)
-        val storedRefreshToken = refreshTokenRepository.find(userId)
-        if (storedRefreshToken == null || storedRefreshToken != request.refreshToken) {
-            throw ExpiredOrInvalidTokenException()
-        }
-
         val user = userRepository.findById(userId).orElseThrow { ExpiredOrInvalidTokenException() }
+
         val newAccessToken = jwtTokenProvider.generateAccessToken(userId, user.role)
         val newRefreshToken = jwtTokenProvider.generateRefreshToken(userId)
-        refreshTokenRepository.save(userId, newRefreshToken, jwtTokenProvider.refreshTokenTtl)
+        val rotated = refreshTokenRepository.compareAndSwap(
+            userId = userId,
+            expectedToken = request.refreshToken,
+            newToken = newRefreshToken,
+            ttl = jwtTokenProvider.refreshTokenTtl,
+        )
+        if (!rotated) {
+            throw ExpiredOrInvalidTokenException()
+        }
 
         return RefreshResponse(accessToken = newAccessToken, refreshToken = newRefreshToken)
     }

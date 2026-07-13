@@ -108,41 +108,51 @@ class AuthServiceTest {
     }
 
     @Test
-    fun `저장된 refreshToken이 없으면 ExpiredOrInvalidTokenException이 발생한다`() {
+    fun `refreshToken의 유저를 찾을 수 없으면 ExpiredOrInvalidTokenException이 발생한다`() {
         every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
-        every { refreshTokenRepository.find(1L) } returns null
+        every { userRepository.findById(1L) } returns Optional.empty()
 
         assertFailsWith<ExpiredOrInvalidTokenException> {
             authService.refresh(RefreshRequest("refresh-token"))
         }
+
+        verify(exactly = 0) { refreshTokenRepository.compareAndSwap(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `저장된 refreshToken과 요청 값이 다르면 ExpiredOrInvalidTokenException이 발생한다`() {
-        every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
-        every { refreshTokenRepository.find(1L) } returns "other-token"
-
-        assertFailsWith<ExpiredOrInvalidTokenException> {
-            authService.refresh(RefreshRequest("refresh-token"))
-        }
-    }
-
-    @Test
-    fun `토큰 재발급에 성공하면 accessToken과 refreshToken을 새로 발급하고 회전한다`() {
+    fun `저장된 refreshToken과 일치하지 않아 원자적 교체에 실패하면 ExpiredOrInvalidTokenException이 발생한다`() {
         val user = existingUser()
         every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
-        every { refreshTokenRepository.find(1L) } returns "refresh-token"
         every { userRepository.findById(1L) } returns Optional.of(user)
         every { jwtTokenProvider.generateAccessToken(1L, Role.CUSTOMER) } returns "new-access-token"
         every { jwtTokenProvider.generateRefreshToken(1L) } returns "new-refresh-token"
         every { jwtTokenProvider.refreshTokenTtl } returns Duration.ofDays(14)
-        every { refreshTokenRepository.save(1L, "new-refresh-token", Duration.ofDays(14)) } returns Unit
+        every {
+            refreshTokenRepository.compareAndSwap(1L, "refresh-token", "new-refresh-token", Duration.ofDays(14))
+        } returns false
+
+        assertFailsWith<ExpiredOrInvalidTokenException> {
+            authService.refresh(RefreshRequest("refresh-token"))
+        }
+    }
+
+    @Test
+    fun `토큰 재발급에 성공하면 accessToken과 refreshToken을 새로 발급하고 원자적으로 회전한다`() {
+        val user = existingUser()
+        every { jwtTokenProvider.getUserId("refresh-token") } returns 1L
+        every { userRepository.findById(1L) } returns Optional.of(user)
+        every { jwtTokenProvider.generateAccessToken(1L, Role.CUSTOMER) } returns "new-access-token"
+        every { jwtTokenProvider.generateRefreshToken(1L) } returns "new-refresh-token"
+        every { jwtTokenProvider.refreshTokenTtl } returns Duration.ofDays(14)
+        every {
+            refreshTokenRepository.compareAndSwap(1L, "refresh-token", "new-refresh-token", Duration.ofDays(14))
+        } returns true
 
         val response = authService.refresh(RefreshRequest("refresh-token"))
 
         assertEquals("new-access-token", response.accessToken)
         assertEquals("new-refresh-token", response.refreshToken)
-        verify { refreshTokenRepository.save(1L, "new-refresh-token", Duration.ofDays(14)) }
+        verify { refreshTokenRepository.compareAndSwap(1L, "refresh-token", "new-refresh-token", Duration.ofDays(14)) }
     }
 
     private fun existingUser(): User =
