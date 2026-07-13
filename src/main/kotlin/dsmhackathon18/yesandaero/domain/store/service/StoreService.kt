@@ -4,8 +4,10 @@ import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.entity.Menu
 import dsmhackathon18.yesandaero.domain.store.entity.Store
+import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.MenuRepository
@@ -69,6 +71,30 @@ class StoreService(
     @Transactional(readOnly = true)
     fun getMyStore(ownerUserId: Long): StoreDetailResponse {
         val store = storeRepository.findByOwnerUserId(ownerUserId) ?: throw StoreNotFoundException()
+        return buildDetailResponse(store, lat = null, lng = null)
+    }
+
+    @Transactional
+    fun updateStore(ownerUserId: Long, storeId: Long, request: StoreUpdateRequest): StoreDetailResponse {
+        val store = storeRepository.findById(storeId).orElseThrow { StoreNotFoundException() }
+        if (store.ownerUserId != ownerUserId) {
+            throw NotStoreOwnerException()
+        }
+
+        store.update(
+            name = request.name,
+            category = request.category,
+            address = request.address,
+            phone = request.phone,
+            avgPrice = request.avgPrice,
+            description = request.description,
+            latitude = request.latitude,
+            longitude = request.longitude,
+            openTime = request.openTime,
+            closeTime = request.closeTime,
+            minOrderAmount = request.minOrderAmount,
+        )
+
         return buildDetailResponse(store, lat = null, lng = null)
     }
 

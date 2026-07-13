@@ -5,6 +5,7 @@ import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
+import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.service.StoreService
@@ -22,6 +23,7 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -178,6 +180,45 @@ class StoreControllerTest {
         every { storeService.getMyStore(1L) } throws StoreNotFoundException()
 
         mockMvc.perform(get("/stores/me"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("STR_404"))
+    }
+
+    @Test
+    fun `가게 정보 수정에 성공하면 200과 수정된 정보를 반환한다`() {
+        every { storeService.updateStore(1L, 10L, any()) } returns detailResponse()
+
+        mockMvc.perform(
+            patch("/stores/10")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"avgPrice": 10000}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.storeId").value(10))
+    }
+
+    @Test
+    fun `본인 가게가 아닌 가게를 수정하면 403과 STR_403을 반환한다`() {
+        every { storeService.updateStore(1L, 10L, any()) } throws NotStoreOwnerException()
+
+        mockMvc.perform(
+            patch("/stores/10")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"avgPrice": 10000}"""),
+        )
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("STR_403"))
+    }
+
+    @Test
+    fun `존재하지 않는 가게를 수정하면 404와 STR_404를 반환한다`() {
+        every { storeService.updateStore(1L, 999L, any()) } throws StoreNotFoundException()
+
+        mockMvc.perform(
+            patch("/stores/999")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"avgPrice": 10000}"""),
+        )
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.code").value("STR_404"))
     }

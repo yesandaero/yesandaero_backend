@@ -3,12 +3,14 @@ package dsmhackathon18.yesandaero.domain.store.controller
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.service.StoreService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -42,4 +44,12 @@ class StoreController(
         @RequestParam(required = false) lat: Double?,
         @RequestParam(required = false) lng: Double?,
     ): StoreDetailResponse = storeService.getStoreDetail(storeId, lat, lng)
+
+    @PatchMapping("/{storeId}")
+    @PreAuthorize("hasRole('OWNER')")
+    fun updateStore(
+        @AuthenticationPrincipal ownerUserId: Long,
+        @PathVariable storeId: Long,
+        @Valid @RequestBody request: StoreUpdateRequest,
+    ): StoreDetailResponse = storeService.updateStore(ownerUserId, storeId, request)
 }

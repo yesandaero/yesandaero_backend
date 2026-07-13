@@ -2,9 +2,11 @@ package dsmhackathon18.yesandaero.domain.store.service
 
 import dsmhackathon18.yesandaero.domain.store.dto.MenuRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
+import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.entity.Menu
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
+import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.MenuRepository
@@ -151,6 +153,61 @@ class StoreServiceTest {
         assertEquals(10L, response.storeId)
         assertNull(response.distanceMeters)
     }
+
+    @Test
+    fun `존재하지 않는 가게를 수정하면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findById(999L) } returns Optional.empty()
+
+        assertFailsWith<StoreNotFoundException> {
+            storeService.updateStore(1L, 999L, updateRequest())
+        }
+    }
+
+    @Test
+    fun `본인 가게가 아닌 가게를 수정하면 NotStoreOwnerException이 발생한다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+
+        assertFailsWith<NotStoreOwnerException> {
+            storeService.updateStore(2L, 10L, updateRequest())
+        }
+    }
+
+    @Test
+    fun `가게 정보 수정에 성공하면 변경된 필드가 반영된 상세 정보를 반환한다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+        every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+
+        val response = storeService.updateStore(
+            1L,
+            10L,
+            updateRequest(avgPrice = 10000, description = "백반, 찌개 전문점", minOrderAmount = 9000),
+        )
+
+        assertEquals(10000, response.avgPrice)
+        assertEquals("백반, 찌개 전문점", response.description)
+        assertEquals(9000, response.minOrderAmount)
+        assertEquals("시흔식당", response.name)
+    }
+
+    private fun updateRequest(
+        avgPrice: Int? = null,
+        description: String? = null,
+        minOrderAmount: Int? = null,
+    ) = StoreUpdateRequest(
+        name = null,
+        category = null,
+        address = null,
+        latitude = null,
+        longitude = null,
+        phone = null,
+        avgPrice = avgPrice,
+        description = description,
+        openTime = null,
+        closeTime = null,
+        minOrderAmount = minOrderAmount,
+    )
 
     private fun existingStore(): Store =
         Store(
