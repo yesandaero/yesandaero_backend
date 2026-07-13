@@ -6,6 +6,7 @@ import dsmhackathon18.yesandaero.domain.store.entity.Menu
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsException
+import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.MenuRepository
 import dsmhackathon18.yesandaero.domain.store.repository.StoreRepository
 import io.mockk.every
@@ -15,8 +16,11 @@ import io.mockk.verify
 import org.junit.jupiter.api.Test
 import org.springframework.test.util.ReflectionTestUtils
 import java.time.LocalTime
+import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class StoreServiceTest {
 
@@ -92,4 +96,75 @@ class StoreServiceTest {
         assertEquals(1, savedMenus.captured[1].displayOrder)
         assertEquals("된장찌개", savedMenus.captured[1].name)
     }
+
+    @Test
+    fun `존재하지 않는 가게를 상세 조회하면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findById(999L) } returns Optional.empty()
+
+        assertFailsWith<StoreNotFoundException> {
+            storeService.getStoreDetail(999L, lat = null, lng = null)
+        }
+    }
+
+    @Test
+    fun `좌표 없이 가게 상세를 조회하면 거리 정보는 null이다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+        every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+
+        val response = storeService.getStoreDetail(10L, lat = null, lng = null)
+
+        assertNull(response.distanceMeters)
+        assertNull(response.walkingMinutes)
+        assertEquals(0, response.usableCouponCount)
+    }
+
+    @Test
+    fun `좌표와 함께 가게 상세를 조회하면 거리 정보가 포함된다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+        every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+
+        val response = storeService.getStoreDetail(10L, lat = 36.3624, lng = 127.3568)
+
+        assertNotNull(response.distanceMeters)
+        assertNotNull(response.walkingMinutes)
+    }
+
+    @Test
+    fun `등록된 가게가 없는 owner가 내 가게를 조회하면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns null
+
+        assertFailsWith<StoreNotFoundException> {
+            storeService.getMyStore(1L)
+        }
+    }
+
+    @Test
+    fun `내 가게를 조회하면 거리 정보 없이 상세 정보를 반환한다`() {
+        val store = existingStore()
+        every { storeRepository.findByOwnerUserId(1L) } returns store
+        every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+
+        val response = storeService.getMyStore(1L)
+
+        assertEquals(10L, response.storeId)
+        assertNull(response.distanceMeters)
+    }
+
+    private fun existingStore(): Store =
+        Store(
+            ownerUserId = 1L,
+            name = "시흔식당",
+            category = StoreCategory.KOREAN,
+            address = "대전시 유성구",
+            phone = "042-000-0000",
+            avgPrice = 9000,
+            description = "백반 전문점",
+            latitude = 36.3624,
+            longitude = 127.3568,
+            openTime = LocalTime.of(9, 0),
+            closeTime = LocalTime.of(21, 0),
+            minOrderAmount = 8000,
+        ).also { ReflectionTestUtils.setField(it, "id", 10L) }
 }
