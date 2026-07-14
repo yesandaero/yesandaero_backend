@@ -6,6 +6,7 @@ import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
+import dsmhackathon18.yesandaero.domain.store.dto.StoreMapResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreSummaryResponse
 import dsmhackathon18.yesandaero.domain.store.entity.Store
@@ -341,6 +342,35 @@ class StoreControllerTest {
         } throws InvalidRequestException("DISTANCE_ASC 정렬에는 lat, lng가 필요합니다")
 
         mockMvc.perform(get("/stores").param("sort", "DISTANCE_ASC"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("GLB_400"))
+    }
+
+    @Test
+    fun `지도 영역 내 가게 조회에 성공하면 200과 목록을 반환한다`() {
+        every {
+            storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null)
+        } returns StoreMapResponse(
+            stores = emptyList(),
+            totalInBounds = 0,
+            truncated = false,
+        )
+
+        mockMvc.perform(
+            get("/stores/map")
+                .param("swLat", "36.0")
+                .param("swLng", "127.0")
+                .param("neLat", "36.5")
+                .param("neLng", "127.5"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.totalInBounds").value(0))
+            .andExpect(jsonPath("$.truncated").value(false))
+    }
+
+    @Test
+    fun `지도 영역 조회 시 필수 좌표가 없으면 400과 GLB_400을 반환한다`() {
+        mockMvc.perform(get("/stores/map").param("swLat", "36.0"))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("GLB_400"))
     }

@@ -6,6 +6,7 @@ import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
+import dsmhackathon18.yesandaero.domain.store.dto.StoreMapResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
@@ -59,6 +60,21 @@ class StoreController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
     ): StoreListResponse = storeService.listStores(category, maxPrice, lat, lng, sort, page, size)
+
+    @GetMapping("/map")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun getStoresInBounds(
+        @RequestParam swLat: Double,
+        @RequestParam swLng: Double,
+        @RequestParam neLat: Double,
+        @RequestParam neLng: Double,
+        @RequestParam(required = false) maxPrice: Int?,
+        @RequestParam(required = false) category: List<StoreCategory>?,
+        @RequestParam(defaultValue = "100") limit: Int,
+        @RequestParam(required = false) lat: Double?,
+        @RequestParam(required = false) lng: Double?,
+    ): StoreMapResponse =
+        storeService.getStoresInBounds(swLat, swLng, neLat, neLng, maxPrice, category, limit, lat, lng)
 
     @GetMapping("/{storeId}")
     fun getStoreDetail(

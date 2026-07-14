@@ -34,6 +34,8 @@ class StoreRepositoryTest {
         name: String,
         category: StoreCategory,
         avgPrice: Int,
+        latitude: Double = 36.3624,
+        longitude: Double = 127.3568,
     ): Store =
         storeRepository.save(
             Store(
@@ -44,8 +46,8 @@ class StoreRepositoryTest {
                 phone = null,
                 avgPrice = avgPrice,
                 description = null,
-                latitude = 36.3624,
-                longitude = 127.3568,
+                latitude = latitude,
+                longitude = longitude,
                 openTime = LocalTime.of(9, 0),
                 closeTime = LocalTime.of(21, 0),
                 minOrderAmount = 0,
@@ -108,5 +110,22 @@ class StoreRepositoryTest {
         assertEquals(listOf("가게B", "가게C"), page.content.map { it.name })
         assertEquals(3, page.totalElements)
         assertEquals(2, page.totalPages)
+    }
+
+    @Test
+    fun `바운딩 박스 안의 가게만 조회한다`() {
+        store(1L, "박스안", StoreCategory.KOREAN, 8000, latitude = 36.36, longitude = 127.35)
+        store(2L, "박스밖", StoreCategory.KOREAN, 8000, latitude = 37.5, longitude = 127.0)
+
+        val result = storeRepository.findAllInBoundingBox(
+            swLat = 36.0,
+            swLng = 127.0,
+            neLat = 36.5,
+            neLng = 127.5,
+            categories = StoreCategory.entries.toList(),
+            maxPrice = null,
+        )
+
+        assertEquals(listOf("박스안"), result.map { it.name })
     }
 }

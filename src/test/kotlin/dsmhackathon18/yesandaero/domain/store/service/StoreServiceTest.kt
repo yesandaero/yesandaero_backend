@@ -31,6 +31,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class StoreServiceTest {
 
@@ -364,6 +365,41 @@ class StoreServiceTest {
 
         assertEquals(1, response.content.size)
         assertNotNull(response.content[0].distanceMeters)
+    }
+
+    @Test
+    fun `바운딩 박스가 뒤집혀 있으면 InvalidRequestException이 발생한다`() {
+        assertFailsWith<InvalidRequestException> {
+            storeService.getStoresInBounds(36.5, 127.5, 36.0, 127.0, null, null, 100, null, null)
+        }
+    }
+
+    @Test
+    fun `바운딩 박스 내 가게 수가 limit을 초과하면 truncated가 true다`() {
+        val stores = (1..3).map {
+            existingStore()
+        }
+        every {
+            storeRepository.findAllInBoundingBox(36.0, 127.0, 36.5, 127.5, StoreCategory.entries.toList(), null)
+        } returns stores
+
+        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 2, null, null)
+
+        assertEquals(3, response.totalInBounds)
+        assertEquals(2, response.stores.size)
+        assertTrue(response.truncated)
+    }
+
+    @Test
+    fun `바운딩 박스 내 가게 수가 limit 이하이면 truncated가 false다`() {
+        every {
+            storeRepository.findAllInBoundingBox(36.0, 127.0, 36.5, 127.5, StoreCategory.entries.toList(), null)
+        } returns listOf(existingStore())
+
+        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null)
+
+        assertEquals(1, response.totalInBounds)
+        assertEquals(false, response.truncated)
     }
 
     private fun emptyPage(): Page<Store> = PageImpl(emptyList(), PageRequest.of(0, 20), 0)

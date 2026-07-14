@@ -7,6 +7,7 @@ import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
+import dsmhackathon18.yesandaero.domain.store.dto.StoreMapResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreSummaryResponse
@@ -190,6 +191,44 @@ class StoreService(
         }
 
         return StoreListResponse(content = content, page = storePage.number, totalPages = storePage.totalPages)
+    }
+
+    @Transactional(readOnly = true)
+    fun getStoresInBounds(
+        swLat: Double,
+        swLng: Double,
+        neLat: Double,
+        neLng: Double,
+        maxPrice: Int?,
+        categories: List<StoreCategory>?,
+        limit: Int,
+        lat: Double?,
+        lng: Double?,
+    ): StoreMapResponse {
+        if (swLat > neLat || swLng > neLng) {
+            throw InvalidRequestException("바운딩 박스 좌표 범위가 올바르지 않습니다")
+        }
+        if (maxPrice != null && maxPrice < 0) {
+            throw InvalidRequestException("maxPrice는 0 이상이어야 합니다")
+        }
+
+        val effectiveCategories = categories?.takeIf { it.isNotEmpty() } ?: StoreCategory.entries.toList()
+        var stores = storeRepository.findAllInBoundingBox(swLat, swLng, neLat, neLng, effectiveCategories, maxPrice)
+
+        if (lat != null && lng != null) {
+            stores = stores.sortedBy { GeoDistanceCalculator.distanceMeters(lat, lng, it.latitude, it.longitude) }
+        }
+
+        val totalInBounds = stores.size
+        val truncated = totalInBounds > limit
+
+        val content = stores.take(limit).map { store ->
+            val distance = GeoDistanceCalculator.calculate(lat, lng, store.latitude, store.longitude)
+            // TODO: coupon 도메인 완성 후 실제 사용 가능 쿠폰 보유 여부로 대체
+            StoreSummaryResponse.of(store, distance, hasUsableCoupon = false)
+        }
+
+        return StoreMapResponse(stores = content, totalInBounds = totalInBounds, truncated = truncated)
     }
 
     private fun distanceSortedPage(

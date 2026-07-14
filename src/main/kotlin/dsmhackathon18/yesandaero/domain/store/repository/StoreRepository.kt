@@ -63,4 +63,23 @@ interface StoreRepository : JpaRepository<Store, Long> {
         @Param("maxPrice") maxPrice: Int?,
         pageable: Pageable,
     ): Page<Store>
+
+    @Query(
+        """
+        SELECT s FROM Store s
+        WHERE s.latitude BETWEEN :swLat AND :neLat
+        AND s.longitude BETWEEN :swLng AND :neLng
+        AND s.category IN :categories
+        AND (:maxPrice IS NULL OR s.avgPrice <= :maxPrice)
+        ORDER BY s.createdAt DESC
+        """,
+    )
+    fun findAllInBoundingBox(
+        @Param("swLat") swLat: Double,
+        @Param("swLng") swLng: Double,
+        @Param("neLat") neLat: Double,
+        @Param("neLng") neLng: Double,
+        @Param("categories") categories: List<StoreCategory>,
+        @Param("maxPrice") maxPrice: Int?,
+    ): List<Store>
 }
