@@ -26,7 +26,6 @@ import dsmhackathon18.yesandaero.domain.store.repository.StoreRepository
 import dsmhackathon18.yesandaero.global.exception.InvalidRequestException
 import dsmhackathon18.yesandaero.global.util.GeoDistanceCalculator
 import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -263,15 +262,14 @@ class StoreService(
         lat: Double,
         lng: Double,
         pageable: Pageable,
-    ): Page<Store> {
-        val sorted = storeRepository.findAllByFilters(categories, maxPrice)
-            .sortedBy { GeoDistanceCalculator.distanceMeters(lat, lng, it.latitude, it.longitude) }
-
-        val fromIndex = (pageable.pageNumber * pageable.pageSize).coerceAtMost(sorted.size)
-        val toIndex = (fromIndex + pageable.pageSize).coerceAtMost(sorted.size)
-
-        return PageImpl(sorted.subList(fromIndex, toIndex), pageable, sorted.size.toLong())
-    }
+    ): Page<Store> =
+        storeRepository.findAllByFiltersOrderByDistanceAsc(
+            categories.map { it.name },
+            maxPrice,
+            lat,
+            lng,
+            pageable,
+        )
 
     private fun buildDetailResponse(store: Store, lat: Double?, lng: Double?): StoreDetailResponse {
         val menus = menuRepository.findByStoreIdOrderByDisplayOrderAsc(requireNotNull(store.id))

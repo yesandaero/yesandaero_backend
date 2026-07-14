@@ -28,18 +28,6 @@ interface StoreRepository : JpaRepository<Store, Long> {
     ): Page<Store>
 
     @Query(
-        """
-        SELECT s FROM Store s
-        WHERE s.category IN :categories
-        AND (:maxPrice IS NULL OR s.avgPrice <= :maxPrice)
-        """,
-    )
-    fun findAllByFilters(
-        @Param("categories") categories: List<StoreCategory>,
-        @Param("maxPrice") maxPrice: Int?,
-    ): List<Store>
-
-    @Query(
         value = """
             SELECT s FROM Store s LEFT JOIN Menu m ON m.store = s
             WHERE s.category IN :categories
@@ -61,6 +49,36 @@ interface StoreRepository : JpaRepository<Store, Long> {
     fun findAllByFiltersOrderByDiscountDesc(
         @Param("categories") categories: List<StoreCategory>,
         @Param("maxPrice") maxPrice: Int?,
+        pageable: Pageable,
+    ): Page<Store>
+
+    @Query(
+        value = """
+            SELECT * FROM stores s
+            WHERE s.category IN (:categories)
+            AND (:maxPrice IS NULL OR s.avg_price <= :maxPrice)
+            ORDER BY (
+                2 * 6371000 * ASIN(
+                    LEAST(1.0, SQRT(
+                        POWER(SIN(RADIANS(s.latitude - :lat) / 2), 2) +
+                        COS(RADIANS(:lat)) * COS(RADIANS(s.latitude)) *
+                        POWER(SIN(RADIANS(s.longitude - :lng) / 2), 2)
+                    ))
+                )
+            ) ASC
+        """,
+        countQuery = """
+            SELECT COUNT(*) FROM stores s
+            WHERE s.category IN (:categories)
+            AND (:maxPrice IS NULL OR s.avg_price <= :maxPrice)
+        """,
+        nativeQuery = true,
+    )
+    fun findAllByFiltersOrderByDistanceAsc(
+        @Param("categories") categories: List<String>,
+        @Param("maxPrice") maxPrice: Int?,
+        @Param("lat") lat: Double,
+        @Param("lng") lng: Double,
         pageable: Pageable,
     ): Page<Store>
 

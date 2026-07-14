@@ -358,8 +358,14 @@ class StoreServiceTest {
     fun `좌표만 있고 정렬 조건이 없으면 DISTANCE_ASC로 기본 정렬하고 거리 정보를 포함한다`() {
         val near = existingStore()
         every {
-            storeRepository.findAllByFilters(StoreCategory.entries.toList(), null)
-        } returns listOf(near)
+            storeRepository.findAllByFiltersOrderByDistanceAsc(
+                StoreCategory.entries.map { it.name },
+                null,
+                36.3624,
+                127.3568,
+                any(),
+            )
+        } returns PageImpl(listOf(near), PageRequest.of(0, 20), 1)
 
         val response = storeService.listStores(null, null, 36.3624, 127.3568, null, 0, 20)
 

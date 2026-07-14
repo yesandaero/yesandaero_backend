@@ -153,4 +153,24 @@ class StoreRepositoryTest {
 
         assertEquals(listOf("카페가게"), page.content.map { it.name })
     }
+
+    @Test
+    fun `거리순 정렬은 DB에서 가까운 가게부터 페이지 정보와 함께 반환한다`() {
+        // 기준 좌표: 36.3624, 127.3568
+        store(ownerIdBase + 1, "먼가게", StoreCategory.KOREAN, 8000, latitude = 37.5, longitude = 127.0)
+        store(ownerIdBase + 2, "가까운가게", StoreCategory.KOREAN, 8000, latitude = 36.363, longitude = 127.357)
+        store(ownerIdBase + 3, "중간가게", StoreCategory.KOREAN, 8000, latitude = 36.5, longitude = 127.4)
+
+        val page = storeRepository.findAllByFiltersOrderByDistanceAsc(
+            StoreCategory.entries.map { it.name },
+            null,
+            36.3624,
+            127.3568,
+            PageRequest.of(0, 2),
+        )
+
+        assertEquals(listOf("가까운가게", "중간가게"), page.content.map { it.name })
+        assertEquals(3, page.totalElements)
+        assertEquals(2, page.totalPages)
+    }
 }
