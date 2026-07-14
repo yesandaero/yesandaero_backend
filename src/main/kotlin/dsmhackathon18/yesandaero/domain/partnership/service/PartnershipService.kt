@@ -1,6 +1,10 @@
 package dsmhackathon18.yesandaero.domain.partnership.service
 
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnerStoreResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipCreateRequest
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipDirection
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipItemResponse
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipListResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipStatusResponse
 import dsmhackathon18.yesandaero.domain.partnership.entity.Partnership
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus
@@ -57,4 +61,42 @@ class PartnershipService(
         )
         return PartnershipStatusResponse.of(saved)
     }
+
+    @Transactional(readOnly = true)
+    fun listPartnerships(ownerUserId: Long, status: PartnershipStatus?): PartnershipListResponse {
+        val myStore = storeRepository.findByOwnerUserId(ownerUserId) ?: throw StoreNotFoundException()
+        val myStoreId = requireNotNull(myStore.id)
+
+        val partnerships = partnershipRepository
+            .findAllByRequesterStoreIdOrReceiverStoreId(myStoreId, myStoreId)
+            .filter { status == null || it.status == status }
+            .sortedByDescending { it.createdAt }
+
+        val partnerStoreIds = partnerships.map { partnerStoreId(it, myStoreId) }.distinct()
+        val partnerStores = storeRepository.findAllById(partnerStoreIds).associateBy { requireNotNull(it.id) }
+
+        val items = partnerships.mapNotNull { partnership ->
+            val partnerStore = partnerStores[partnerStoreId(partnership, myStoreId)] ?: return@mapNotNull null
+            PartnershipItemResponse(
+                partnershipId = requireNotNull(partnership.id),
+                partnerStore = PartnerStoreResponse(
+                    storeId = requireNotNull(partnerStore.id),
+                    name = partnerStore.name,
+                    category = partnerStore.category,
+                ),
+                direction = if (partnership.requesterStoreId == myStoreId) {
+                    PartnershipDirection.SENT
+                } else {
+                    PartnershipDirection.RECEIVED
+                },
+                status = partnership.status,
+                createdAt = partnership.createdAt,
+            )
+        }
+
+        return PartnershipListResponse(partnerships = items)
+    }
+
+    private fun partnerStoreId(partnership: Partnership, myStoreId: Long): Long =
+        if (partnership.requesterStoreId == myStoreId) partnership.receiverStoreId else partnership.requesterStoreId
 }

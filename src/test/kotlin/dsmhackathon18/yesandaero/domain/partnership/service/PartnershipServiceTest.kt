@@ -1,6 +1,7 @@
 package dsmhackathon18.yesandaero.domain.partnership.service
 
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipCreateRequest
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipDirection
 import dsmhackathon18.yesandaero.domain.partnership.entity.Partnership
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus
 import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipAlreadyExistsException
@@ -135,7 +136,60 @@ class PartnershipServiceTest {
         assertEquals(20L, savedSlot.captured.receiverStoreId)
     }
 
-    private fun existingPartnership(requesterStoreId: Long, receiverStoreId: Long, status: PartnershipStatus): Partnership =
+    @Test
+    fun `제휴 목록 조회 시 내 가게가 없으면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns null
+
+        assertFailsWith<StoreNotFoundException> {
+            partnershipService.listPartnerships(1L, null)
+        }
+    }
+
+    @Test
+    fun `제휴 목록 조회 시 보낸 요청과 받은 요청의 방향을 올바르게 구분한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        val sent = existingPartnership(10L, 20L, PartnershipStatus.PENDING, id = 1L)
+        val received = existingPartnership(30L, 10L, PartnershipStatus.ACCEPTED, id = 2L)
+        every {
+            partnershipRepository.findAllByRequesterStoreIdOrReceiverStoreId(10L, 10L)
+        } returns listOf(sent, received)
+        every {
+            storeRepository.findAllById(any<List<Long>>())
+        } returns listOf(store(20L, 2L), store(30L, 3L))
+
+        val response = partnershipService.listPartnerships(1L, null)
+
+        assertEquals(2, response.partnerships.size)
+        val sentItem = response.partnerships.first { it.partnershipId == 1L }
+        val receivedItem = response.partnerships.first { it.partnershipId == 2L }
+        assertEquals(PartnershipDirection.SENT, sentItem.direction)
+        assertEquals(20L, sentItem.partnerStore.storeId)
+        assertEquals(PartnershipDirection.RECEIVED, receivedItem.direction)
+        assertEquals(30L, receivedItem.partnerStore.storeId)
+    }
+
+    @Test
+    fun `제휴 목록 조회 시 status로 필터링한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        val pending = existingPartnership(10L, 20L, PartnershipStatus.PENDING, id = 1L)
+        val accepted = existingPartnership(10L, 30L, PartnershipStatus.ACCEPTED, id = 2L)
+        every {
+            partnershipRepository.findAllByRequesterStoreIdOrReceiverStoreId(10L, 10L)
+        } returns listOf(pending, accepted)
+        every { storeRepository.findAllById(listOf(30L)) } returns listOf(store(30L, 3L))
+
+        val response = partnershipService.listPartnerships(1L, PartnershipStatus.ACCEPTED)
+
+        assertEquals(1, response.partnerships.size)
+        assertEquals(2L, response.partnerships[0].partnershipId)
+    }
+
+    private fun existingPartnership(
+        requesterStoreId: Long,
+        receiverStoreId: Long,
+        status: PartnershipStatus,
+        id: Long = 1L,
+    ): Partnership =
         Partnership(requesterStoreId = requesterStoreId, receiverStoreId = receiverStoreId, status = status)
-            .also { ReflectionTestUtils.setField(it, "id", 1L) }
+            .also { ReflectionTestUtils.setField(it, "id", id) }
 }

@@ -1,10 +1,15 @@
 package dsmhackathon18.yesandaero.domain.partnership.controller
 
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnerStoreResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipCreateRequest
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipDirection
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipItemResponse
+import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipListResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipStatusResponse
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus
 import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipAlreadyExistsException
 import dsmhackathon18.yesandaero.domain.partnership.service.PartnershipService
+import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
@@ -18,10 +23,12 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.time.LocalDateTime
 
 class PartnershipControllerTest {
 
@@ -100,5 +107,36 @@ class PartnershipControllerTest {
         )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("GLB_400"))
+    }
+
+    @Test
+    fun `제휴 목록 조회에 성공하면 200과 목록을 반환한다`() {
+        every { partnershipService.listPartnerships(1L, null) } returns PartnershipListResponse(
+            partnerships = listOf(
+                PartnershipItemResponse(
+                    partnershipId = 5L,
+                    partnerStore = PartnerStoreResponse(12L, "흔카페", StoreCategory.CAFE),
+                    direction = PartnershipDirection.RECEIVED,
+                    status = PartnershipStatus.PENDING,
+                    createdAt = LocalDateTime.of(2026, 7, 13, 10, 0),
+                ),
+            ),
+        )
+
+        mockMvc.perform(get("/partnerships"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.partnerships[0].partnershipId").value(5))
+            .andExpect(jsonPath("$.partnerships[0].partnerStore.storeId").value(12))
+            .andExpect(jsonPath("$.partnerships[0].direction").value("RECEIVED"))
+    }
+
+    @Test
+    fun `제휴 목록 조회 시 status 쿼리로 필터링한다`() {
+        every { partnershipService.listPartnerships(1L, PartnershipStatus.ACCEPTED) } returns
+            PartnershipListResponse(partnerships = emptyList())
+
+        mockMvc.perform(get("/partnerships").param("status", "ACCEPTED"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.partnerships.length()").value(0))
     }
 }
