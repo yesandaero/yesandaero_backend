@@ -44,8 +44,9 @@ class CouponTemplateController(
 
     @GetMapping
     @PreAuthorize("hasRole('OWNER')")
-    fun listMyTemplates(
+    fun listTemplates(
         @AuthenticationPrincipal ownerUserId: Long,
+        @RequestParam(required = false) ownerStoreId: Long?,
         @RequestParam(required = false) active: Boolean?,
-    ): CouponTemplateListResponse = couponTemplateService.listMyTemplates(ownerUserId, active)
+    ): CouponTemplateListResponse = couponTemplateService.listTemplates(ownerUserId, ownerStoreId, active)
 }
