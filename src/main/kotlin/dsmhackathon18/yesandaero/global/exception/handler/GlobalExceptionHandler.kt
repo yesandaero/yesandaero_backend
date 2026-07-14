@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.global.exception.handler
 
+import dsmhackathon18.yesandaero.domain.user.exception.UserErrorCode
 import dsmhackathon18.yesandaero.global.exception.BusinessException
 import dsmhackathon18.yesandaero.global.exception.ErrorResponse
 import dsmhackathon18.yesandaero.global.exception.GlobalErrorCode
@@ -84,11 +85,12 @@ class GlobalExceptionHandler {
             .body(ErrorResponse.of(errorCode, request.requestURI))
     }
 
+    // @PreAuthorize("hasRole(...)") 등 role 기반 인가 실패
     @ExceptionHandler(AccessDeniedException::class)
     fun handleAccessDenied(e: AccessDeniedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         log.warn("Access denied: {} {} - {}", request.method, request.requestURI, e.message)
 
-        val errorCode = GlobalErrorCode.FORBIDDEN
+        val errorCode = UserErrorCode.ROLE_NOT_ALLOWED
         return ResponseEntity
             .status(errorCode.status)
             .body(ErrorResponse.of(errorCode, request.requestURI))
