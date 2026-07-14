@@ -3,10 +3,14 @@ package dsmhackathon18.yesandaero.domain.coupon.controller
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponIssueResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponRegisterResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponStoreResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponUseResponse
 import dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus
+import dsmhackathon18.yesandaero.domain.coupon.entity.DiscountType
 import dsmhackathon18.yesandaero.domain.coupon.exception.CouponAlreadyRegisteredException
+import dsmhackathon18.yesandaero.domain.coupon.exception.InvalidCouponStatusException
 import dsmhackathon18.yesandaero.domain.coupon.exception.InvalidCouponTokenException
 import dsmhackathon18.yesandaero.domain.coupon.exception.IssueNotAllowedException
+import dsmhackathon18.yesandaero.domain.coupon.exception.NotCouponOwnerException
 import dsmhackathon18.yesandaero.domain.coupon.service.CouponService
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
@@ -143,5 +147,43 @@ class CouponControllerTest {
         )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("GLB_400"))
+    }
+
+    @Test
+    fun `쿠폰 사용에 성공하면 200과 USED 상태를 반환한다`() {
+        authenticateAs("CUSTOMER")
+        every { couponService.useCoupon(1L, 101L) } returns CouponUseResponse(
+            couponId = 101L,
+            name = "아메리카노 1000원 할인",
+            discountType = DiscountType.AMOUNT,
+            discountValue = 1000,
+            status = CouponStatus.USED,
+            usedAt = LocalDateTime.of(2026, 7, 13, 12, 30),
+        )
+
+        mockMvc.perform(post("/coupons/101/use"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("USED"))
+            .andExpect(jsonPath("$.discountValue").value(1000))
+    }
+
+    @Test
+    fun `본인 쿠폰이 아니면 사용 시 403과 CPN_403_02를 반환한다`() {
+        authenticateAs("CUSTOMER")
+        every { couponService.useCoupon(1L, 101L) } throws NotCouponOwnerException()
+
+        mockMvc.perform(post("/coupons/101/use"))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("CPN_403_02"))
+    }
+
+    @Test
+    fun `사용할 수 없는 상태의 쿠폰이면 409와 CPN_409_02를 반환한다`() {
+        authenticateAs("CUSTOMER")
+        every { couponService.useCoupon(1L, 101L) } throws InvalidCouponStatusException()
+
+        mockMvc.perform(post("/coupons/101/use"))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("CPN_409_02"))
     }
 }

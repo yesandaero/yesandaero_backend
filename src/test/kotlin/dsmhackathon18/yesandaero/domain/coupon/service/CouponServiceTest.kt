@@ -7,8 +7,11 @@ import dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus
 import dsmhackathon18.yesandaero.domain.coupon.entity.CouponTemplate
 import dsmhackathon18.yesandaero.domain.coupon.entity.DiscountType
 import dsmhackathon18.yesandaero.domain.coupon.exception.CouponAlreadyRegisteredException
+import dsmhackathon18.yesandaero.domain.coupon.exception.CouponNotFoundException
+import dsmhackathon18.yesandaero.domain.coupon.exception.InvalidCouponStatusException
 import dsmhackathon18.yesandaero.domain.coupon.exception.InvalidCouponTokenException
 import dsmhackathon18.yesandaero.domain.coupon.exception.IssueNotAllowedException
+import dsmhackathon18.yesandaero.domain.coupon.exception.NotCouponOwnerException
 import dsmhackathon18.yesandaero.domain.coupon.repository.CouponIssueTokenRepository
 import dsmhackathon18.yesandaero.domain.coupon.repository.CouponRepository
 import dsmhackathon18.yesandaero.domain.coupon.repository.CouponTemplateRepository
@@ -24,6 +27,7 @@ import io.mockk.verify
 import org.junit.jupiter.api.Test
 import org.springframework.test.util.ReflectionTestUtils
 import java.time.Duration
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.Optional
 import kotlin.test.assertEquals
@@ -199,11 +203,89 @@ class CouponServiceTest {
         assertEquals("아메리카노 1000원 할인", response.name)
     }
 
-    private fun existingCoupon(status: CouponStatus): Coupon =
+    // ===== useCoupon =====
+
+    @Test
+    fun `존재하지 않는 쿠폰을 사용하면 CouponNotFoundException이 발생한다`() {
+        every { couponRepository.findById(101L) } returns Optional.empty()
+
+        assertFailsWith<CouponNotFoundException> {
+            couponService.useCoupon(5L, 101L)
+        }
+    }
+
+    @Test
+    fun `본인 쿠폰이 아니면 사용 시 NotCouponOwnerException이 발생한다`() {
+        val coupon = existingCoupon(CouponStatus.REGISTERED, userId = 5L, expiresAt = LocalDateTime.now().plusDays(1))
+        every { couponRepository.findById(101L) } returns Optional.of(coupon)
+
+        assertFailsWith<NotCouponOwnerException> {
+            couponService.useCoupon(999L, 101L)
+        }
+    }
+
+    @Test
+    fun `REGISTERED 상태가 아니면 사용 시 InvalidCouponStatusException이 발생한다`() {
+        val coupon = existingCoupon(CouponStatus.USED, userId = 5L, expiresAt = LocalDateTime.now().plusDays(1))
+        every { couponRepository.findById(101L) } returns Optional.of(coupon)
+
+        assertFailsWith<InvalidCouponStatusException> {
+            couponService.useCoupon(5L, 101L)
+        }
+
+        verify(exactly = 0) { couponRepository.useIfRegistered(any(), any()) }
+    }
+
+    @Test
+    fun `만료 시점이 지난 쿠폰은 사용 시 InvalidCouponStatusException이 발생한다`() {
+        val coupon = existingCoupon(CouponStatus.REGISTERED, userId = 5L, expiresAt = LocalDateTime.now().minusDays(1))
+        every { couponRepository.findById(101L) } returns Optional.of(coupon)
+
+        assertFailsWith<InvalidCouponStatusException> {
+            couponService.useCoupon(5L, 101L)
+        }
+
+        verify(exactly = 0) { couponRepository.useIfRegistered(any(), any()) }
+    }
+
+    @Test
+    fun `동시 요청으로 이미 처리되어 있으면(원자적 업데이트 0건) InvalidCouponStatusException이 발생한다`() {
+        val coupon = existingCoupon(CouponStatus.REGISTERED, userId = 5L, expiresAt = LocalDateTime.now().plusDays(1))
+        every { couponRepository.findById(101L) } returns Optional.of(coupon)
+        every { couponRepository.useIfRegistered(101L, any()) } returns 0
+
+        assertFailsWith<InvalidCouponStatusException> {
+            couponService.useCoupon(5L, 101L)
+        }
+    }
+
+    @Test
+    fun `쿠폰 사용에 성공하면 USED 상태와 할인 정보를 반환한다`() {
+        val coupon = existingCoupon(CouponStatus.REGISTERED, userId = 5L, expiresAt = LocalDateTime.now().plusDays(1))
+        every { couponRepository.findById(101L) } returns Optional.of(coupon)
+        every { couponRepository.useIfRegistered(101L, any()) } returns 1
+        every { couponTemplateRepository.findById(3L) } returns Optional.of(template(3L, storeId = 10L))
+
+        val response = couponService.useCoupon(5L, 101L)
+
+        assertEquals(CouponStatus.USED, response.status)
+        assertEquals(1000, response.discountValue)
+        assertEquals(DiscountType.AMOUNT, response.discountType)
+    }
+
+    private fun existingCoupon(
+        status: CouponStatus,
+        userId: Long? = null,
+        expiresAt: LocalDateTime? = null,
+    ): Coupon =
         Coupon(
             templateId = 3L,
             issuerStoreId = 10L,
             targetStoreId = 20L,
             status = status,
-        ).also { ReflectionTestUtils.setField(it, "id", 101L) }
+        ).also {
+            ReflectionTestUtils.setField(it, "id", 101L)
+            if (userId != null) ReflectionTestUtils.setField(it, "userId", userId)
+            if (expiresAt != null) ReflectionTestUtils.setField(it, "expiresAt", expiresAt)
+        }
 }
