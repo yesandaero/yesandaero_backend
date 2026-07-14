@@ -26,6 +26,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -203,5 +204,40 @@ class PartnershipControllerTest {
         mockMvc.perform(patch("/partnerships/5/reject"))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("PTN_409_02"))
+    }
+
+    @Test
+    fun `제휴 해지에 성공하면 204를 반환한다`() {
+        every { partnershipService.terminatePartnership(1L, 5L) } returns Unit
+
+        mockMvc.perform(delete("/partnerships/5"))
+            .andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `당사자가 아니면 해지 시 403과 PTN_403을 반환한다`() {
+        every { partnershipService.terminatePartnership(1L, 5L) } throws NotPartnershipPartyException()
+
+        mockMvc.perform(delete("/partnerships/5"))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("PTN_403"))
+    }
+
+    @Test
+    fun `ACCEPTED가 아니면 해지 시 409와 PTN_409_02를 반환한다`() {
+        every { partnershipService.terminatePartnership(1L, 5L) } throws InvalidPartnershipStatusException()
+
+        mockMvc.perform(delete("/partnerships/5"))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("PTN_409_02"))
+    }
+
+    @Test
+    fun `존재하지 않는 제휴를 해지하면 404와 PTN_404를 반환한다`() {
+        every { partnershipService.terminatePartnership(1L, 999L) } throws PartnershipNotFoundException()
+
+        mockMvc.perform(delete("/partnerships/999"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("PTN_404"))
     }
 }

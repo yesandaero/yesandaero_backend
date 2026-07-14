@@ -9,6 +9,7 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -53,4 +54,14 @@ class PartnershipController(
         @AuthenticationPrincipal ownerUserId: Long,
         @PathVariable partnershipId: Long,
     ): PartnershipStatusResponse = partnershipService.rejectPartnership(ownerUserId, partnershipId)
+
+    @DeleteMapping("/{partnershipId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('OWNER')")
+    fun terminatePartnership(
+        @AuthenticationPrincipal ownerUserId: Long,
+        @PathVariable partnershipId: Long,
+    ) {
+        partnershipService.terminatePartnership(ownerUserId, partnershipId)
+    }
 }

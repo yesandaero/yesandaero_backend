@@ -276,6 +276,63 @@ class PartnershipServiceTest {
         assertEquals(null, response.acceptedAt)
     }
 
+    @Test
+    fun `제휴가 존재하지 않으면 해지 시 PartnershipNotFoundException이 발생한다`() {
+        every { partnershipRepository.findById(5L) } returns Optional.empty()
+
+        assertFailsWith<PartnershipNotFoundException> {
+            partnershipService.terminatePartnership(1L, 5L)
+        }
+    }
+
+    @Test
+    fun `양쪽 가게 소유주가 아니면 해지 시 NotPartnershipPartyException이 발생한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.ACCEPTED)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(10L) } returns Optional.of(store(10L, 100L))
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 200L))
+
+        assertFailsWith<NotPartnershipPartyException> {
+            partnershipService.terminatePartnership(1L, 1L)
+        }
+    }
+
+    @Test
+    fun `ACCEPTED가 아니면 해지 시 InvalidPartnershipStatusException이 발생한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.PENDING)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(10L) } returns Optional.of(store(10L, 1L))
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        assertFailsWith<InvalidPartnershipStatusException> {
+            partnershipService.terminatePartnership(1L, 1L)
+        }
+    }
+
+    @Test
+    fun `요청 가게 소유주가 해지하면 TERMINATED로 전이한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.ACCEPTED)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(10L) } returns Optional.of(store(10L, 1L))
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        partnershipService.terminatePartnership(1L, 1L)
+
+        assertEquals(PartnershipStatus.TERMINATED, partnership.status)
+    }
+
+    @Test
+    fun `수신 가게 소유주가 해지하면 TERMINATED로 전이한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.ACCEPTED)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(10L) } returns Optional.of(store(10L, 1L))
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        partnershipService.terminatePartnership(2L, 1L)
+
+        assertEquals(PartnershipStatus.TERMINATED, partnership.status)
+    }
+
     private fun existingPartnership(
         requesterStoreId: Long,
         receiverStoreId: Long,

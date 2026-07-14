@@ -132,6 +132,22 @@ class PartnershipService(
         return PartnershipStatusResponse.of(partnership)
     }
 
+    @Transactional
+    fun terminatePartnership(ownerUserId: Long, partnershipId: Long) {
+        val partnership = partnershipRepository.findById(partnershipId).orElseThrow { PartnershipNotFoundException() }
+        val requesterStore = storeRepository.findById(partnership.requesterStoreId).orElseThrow { StoreNotFoundException() }
+        val receiverStore = storeRepository.findById(partnership.receiverStoreId).orElseThrow { StoreNotFoundException() }
+
+        if (requesterStore.ownerUserId != ownerUserId && receiverStore.ownerUserId != ownerUserId) {
+            throw NotPartnershipPartyException()
+        }
+        if (partnership.status != PartnershipStatus.ACCEPTED) {
+            throw InvalidPartnershipStatusException()
+        }
+
+        partnership.terminate()
+    }
+
     private fun partnerStoreId(partnership: Partnership, myStoreId: Long): Long =
         if (partnership.requesterStoreId == myStoreId) partnership.receiverStoreId else partnership.requesterStoreId
 }
