@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.coupon.repository.CouponRepository
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus as PartnershipEntityStatus
 import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
@@ -33,12 +34,14 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDateTime
 
 @Service
 class StoreService(
     private val storeRepository: StoreRepository,
     private val menuRepository: MenuRepository,
     private val partnershipRepository: PartnershipRepository,
+    private val couponRepository: CouponRepository,
 ) {
 
     @Transactional
@@ -82,15 +85,15 @@ class StoreService(
     }
 
     @Transactional(readOnly = true)
-    fun getStoreDetail(storeId: Long, lat: Double?, lng: Double?): StoreDetailResponse {
+    fun getStoreDetail(storeId: Long, lat: Double?, lng: Double?, userId: Long): StoreDetailResponse {
         val store = storeRepository.findById(storeId).orElseThrow { StoreNotFoundException() }
-        return buildDetailResponse(store, lat, lng)
+        return buildDetailResponse(store, lat, lng, userId)
     }
 
     @Transactional(readOnly = true)
     fun getMyStore(ownerUserId: Long): StoreDetailResponse {
         val store = storeRepository.findByOwnerUserId(ownerUserId) ?: throw StoreNotFoundException()
-        return buildDetailResponse(store, lat = null, lng = null)
+        return buildDetailResponse(store, lat = null, lng = null, userId = ownerUserId)
     }
 
     @Transactional
@@ -114,7 +117,7 @@ class StoreService(
             minOrderAmount = request.minOrderAmount,
         )
 
-        return buildDetailResponse(store, lat = null, lng = null)
+        return buildDetailResponse(store, lat = null, lng = null, userId = ownerUserId)
     }
 
     @Transactional
@@ -209,6 +212,7 @@ class StoreService(
         limit: Int,
         lat: Double?,
         lng: Double?,
+        userId: Long,
     ): StoreMapResponse {
         if (swLat > neLat || swLng > neLng) {
             throw InvalidRequestException("바운딩 박스 좌표 범위가 올바르지 않습니다")
@@ -226,11 +230,21 @@ class StoreService(
 
         val totalInBounds = stores.size
         val truncated = totalInBounds > limit
+        val limited = stores.take(limit)
 
-        val content = stores.take(limit).map { store ->
+        val storeIdsWithUsableCoupon = if (limited.isEmpty()) {
+            emptySet()
+        } else {
+            couponRepository.findTargetStoreIdsWithUsableCoupon(
+                userId,
+                limited.mapNotNull { it.id },
+                LocalDateTime.now(),
+            ).toSet()
+        }
+
+        val content = limited.map { store ->
             val distance = GeoDistanceCalculator.calculate(lat, lng, store.latitude, store.longitude)
-            // TODO: coupon 도메인 완성 후 실제 사용 가능 쿠폰 보유 여부로 대체
-            StoreSummaryResponse.of(store, distance, hasUsableCoupon = false)
+            StoreSummaryResponse.of(store, distance, hasUsableCoupon = store.id in storeIdsWithUsableCoupon)
         }
 
         return StoreMapResponse(stores = content, totalInBounds = totalInBounds, truncated = truncated)
@@ -291,11 +305,11 @@ class StoreService(
             pageable,
         )
 
-    private fun buildDetailResponse(store: Store, lat: Double?, lng: Double?): StoreDetailResponse {
+    private fun buildDetailResponse(store: Store, lat: Double?, lng: Double?, userId: Long): StoreDetailResponse {
         val menus = menuRepository.findByStoreIdOrderByDisplayOrderAsc(requireNotNull(store.id))
             .map(MenuResponse::from)
         val distance = GeoDistanceCalculator.calculate(lat, lng, store.latitude, store.longitude)
-        // TODO: coupon 도메인 완성 후 로그인한 사용자의 실제 사용 가능 쿠폰 수로 대체
-        return StoreDetailResponse.of(store, menus, distance, usableCouponCount = 0)
+        val usableCouponCount = couponRepository.countUsable(userId, requireNotNull(store.id), LocalDateTime.now())
+        return StoreDetailResponse.of(store, menus, distance, usableCouponCount = usableCouponCount.toInt())
     }
 }

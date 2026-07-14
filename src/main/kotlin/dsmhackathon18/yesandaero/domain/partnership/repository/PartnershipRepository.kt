@@ -22,4 +22,14 @@ interface PartnershipRepository : JpaRepository<Partnership, Long> {
         @Param("myStoreId") myStoreId: Long,
         @Param("targetStoreIds") targetStoreIds: List<Long>,
     ): List<Partnership>
+
+    @Query(
+        """
+        SELECT COUNT(p) > 0 FROM Partnership p
+        WHERE p.status = dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus.ACCEPTED
+        AND ((p.requesterStoreId = :storeA AND p.receiverStoreId = :storeB)
+          OR (p.requesterStoreId = :storeB AND p.receiverStoreId = :storeA))
+        """,
+    )
+    fun existsAcceptedBetween(@Param("storeA") storeA: Long, @Param("storeB") storeB: Long): Boolean
 }

@@ -65,6 +65,7 @@ class StoreController(
     @GetMapping("/map")
     @PreAuthorize("hasRole('CUSTOMER')")
     fun getStoresInBounds(
+        @AuthenticationPrincipal userId: Long,
         @RequestParam swLat: Double,
         @RequestParam swLng: Double,
         @RequestParam neLat: Double,
@@ -75,14 +76,15 @@ class StoreController(
         @RequestParam(required = false) lat: Double?,
         @RequestParam(required = false) lng: Double?,
     ): StoreMapResponse =
-        storeService.getStoresInBounds(swLat, swLng, neLat, neLng, maxPrice, category, limit, lat, lng)
+        storeService.getStoresInBounds(swLat, swLng, neLat, neLng, maxPrice, category, limit, lat, lng, userId)
 
     @GetMapping("/{storeId}")
     fun getStoreDetail(
+        @AuthenticationPrincipal userId: Long,
         @PathVariable storeId: Long,
         @RequestParam(required = false) lat: Double?,
         @RequestParam(required = false) lng: Double?,
-    ): StoreDetailResponse = storeService.getStoreDetail(storeId, lat, lng)
+    ): StoreDetailResponse = storeService.getStoreDetail(storeId, lat, lng, userId)
 
     @PatchMapping("/{storeId}")
     @PreAuthorize("hasRole('OWNER')")
