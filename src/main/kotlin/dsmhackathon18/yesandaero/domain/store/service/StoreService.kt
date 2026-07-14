@@ -1,5 +1,7 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus as PartnershipEntityStatus
+import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
@@ -36,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional
 class StoreService(
     private val storeRepository: StoreRepository,
     private val menuRepository: MenuRepository,
+    private val partnershipRepository: PartnershipRepository,
 ) {
 
     @Transactional
@@ -241,15 +244,32 @@ class StoreService(
         page: Int,
         size: Int,
     ): StoreSearchListResponse {
+        val myStore = storeRepository.findByOwnerUserId(ownerUserId) ?: throw StoreNotFoundException()
+        val myStoreId = requireNotNull(myStore.id)
+
         val storePage = storeRepository.searchForPartnership(ownerUserId, keyword, category, PageRequest.of(page, size))
+        val targetStoreIds = storePage.content.mapNotNull { it.id }
+
+        val partnershipByPartnerStoreId = if (targetStoreIds.isEmpty()) {
+            emptyMap()
+        } else {
+            partnershipRepository.findAllBetween(myStoreId, targetStoreIds)
+                .associateBy { if (it.requesterStoreId == myStoreId) it.receiverStoreId else it.requesterStoreId }
+        }
 
         val content = storePage.content.map { store ->
-            // TODO: partnership 도메인 완성 후 실제 제휴 상태로 대체
+            val partnership = partnershipByPartnerStoreId[store.id]
+            val partnershipStatus = when (partnership?.status) {
+                PartnershipEntityStatus.PENDING -> PartnershipStatus.PENDING
+                PartnershipEntityStatus.ACCEPTED -> PartnershipStatus.ACCEPTED
+                // REJECTED/TERMINATED/없음은 재요청 가능해야 하므로 NONE 취급
+                else -> PartnershipStatus.NONE
+            }
             StoreSearchItemResponse(
                 storeId = requireNotNull(store.id),
                 name = store.name,
                 category = store.category,
-                partnershipStatus = PartnershipStatus.NONE,
+                partnershipStatus = partnershipStatus,
             )
         }
 

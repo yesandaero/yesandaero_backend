@@ -1,5 +1,8 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.partnership.entity.Partnership
+import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus as PartnershipEntityStatus
+import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
@@ -37,7 +40,8 @@ class StoreServiceTest {
 
     private val storeRepository = mockk<StoreRepository>()
     private val menuRepository = mockk<MenuRepository>()
-    private val storeService = StoreService(storeRepository, menuRepository)
+    private val partnershipRepository = mockk<PartnershipRepository>()
+    private val storeService = StoreService(storeRepository, menuRepository, partnershipRepository)
 
     private fun registerRequest(menus: List<MenuRequest> = emptyList()) = StoreRegisterRequest(
         name = "시흔식당",
@@ -409,17 +413,68 @@ class StoreServiceTest {
     }
 
     @Test
-    fun `제휴 대상 가게를 검색하면 partnershipStatus가 NONE으로 고정된 결과를 반환한다`() {
-        val store = existingStore()
+    fun `제휴 대상 가게 검색 시 내 가게가 없으면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns null
+
+        assertFailsWith<StoreNotFoundException> {
+            storeService.searchStoresForPartnership(1L, "흔", null, 0, 20)
+        }
+    }
+
+    @Test
+    fun `제휴 이력이 없으면 partnershipStatus는 NONE이다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns existingStore()
+        val target = otherStore(20L)
         every {
             storeRepository.searchForPartnership(1L, "흔", null, PageRequest.of(0, 20))
-        } returns PageImpl(listOf(store), PageRequest.of(0, 20), 1)
+        } returns PageImpl(listOf(target), PageRequest.of(0, 20), 1)
+        every { partnershipRepository.findAllBetween(10L, listOf(20L)) } returns emptyList()
 
         val response = storeService.searchStoresForPartnership(1L, "흔", null, 0, 20)
 
         assertEquals(1, response.content.size)
         assertEquals("NONE", response.content[0].partnershipStatus.name)
-        assertEquals(10L, response.content[0].storeId)
+        assertEquals(20L, response.content[0].storeId)
+    }
+
+    @Test
+    fun `PENDING 제휴가 있으면 partnershipStatus는 PENDING이다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns existingStore()
+        val target = otherStore(20L)
+        every {
+            storeRepository.searchForPartnership(1L, "흔", null, PageRequest.of(0, 20))
+        } returns PageImpl(listOf(target), PageRequest.of(0, 20), 1)
+        every { partnershipRepository.findAllBetween(10L, listOf(20L)) } returns listOf(
+            Partnership(
+                requesterStoreId = 10L,
+                receiverStoreId = 20L,
+                status = PartnershipEntityStatus.PENDING,
+            ),
+        )
+
+        val response = storeService.searchStoresForPartnership(1L, "흔", null, 0, 20)
+
+        assertEquals("PENDING", response.content[0].partnershipStatus.name)
+    }
+
+    @Test
+    fun `REJECTED 제휴는 재요청 가능해야 하므로 partnershipStatus는 NONE이다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns existingStore()
+        val target = otherStore(20L)
+        every {
+            storeRepository.searchForPartnership(1L, "흔", null, PageRequest.of(0, 20))
+        } returns PageImpl(listOf(target), PageRequest.of(0, 20), 1)
+        every { partnershipRepository.findAllBetween(10L, listOf(20L)) } returns listOf(
+            Partnership(
+                requesterStoreId = 10L,
+                receiverStoreId = 20L,
+                status = PartnershipEntityStatus.REJECTED,
+            ),
+        )
+
+        val response = storeService.searchStoresForPartnership(1L, "흔", null, 0, 20)
+
+        assertEquals("NONE", response.content[0].partnershipStatus.name)
     }
 
     private fun emptyPage(): Page<Store> = PageImpl(emptyList(), PageRequest.of(0, 20), 0)
@@ -439,4 +494,20 @@ class StoreServiceTest {
             closeTime = LocalTime.of(21, 0),
             minOrderAmount = 8000,
         ).also { ReflectionTestUtils.setField(it, "id", 10L) }
+
+    private fun otherStore(id: Long): Store =
+        Store(
+            ownerUserId = 2L,
+            name = "흔카페",
+            category = StoreCategory.CAFE,
+            address = "대전시 서구",
+            phone = null,
+            avgPrice = 6000,
+            description = null,
+            latitude = 36.35,
+            longitude = 127.38,
+            openTime = LocalTime.of(8, 0),
+            closeTime = LocalTime.of(22, 0),
+            minOrderAmount = 5000,
+        ).also { ReflectionTestUtils.setField(it, "id", id) }
 }
