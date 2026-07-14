@@ -1,9 +1,11 @@
 package dsmhackathon18.yesandaero.global.exception.handler
 
+import dsmhackathon18.yesandaero.domain.user.exception.UserErrorCode
 import dsmhackathon18.yesandaero.global.exception.EntityNotFoundException
 import dsmhackathon18.yesandaero.global.exception.GlobalErrorCode
 import org.junit.jupiter.api.Test
 import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.security.access.AccessDeniedException
 import kotlin.test.assertEquals
 
 class GlobalExceptionHandlerTest {
@@ -51,5 +53,14 @@ class GlobalExceptionHandlerTest {
         val response = handler.handleBusinessException(EntityNotFoundException(), request(uri = "/api/posts/1"))
 
         assertEquals("/api/posts/1", response.body?.path)
+    }
+
+    @Test
+    fun `role 기반 인가 실패(AccessDeniedException)는 USR_403으로 변환된다`() {
+        val response = handler.handleAccessDenied(AccessDeniedException("Access is denied"), request())
+
+        assertEquals(UserErrorCode.ROLE_NOT_ALLOWED.status, response.statusCode)
+        assertEquals(UserErrorCode.ROLE_NOT_ALLOWED.code, response.body?.code)
+        assertEquals(UserErrorCode.ROLE_NOT_ALLOWED.message, response.body?.message)
     }
 }
