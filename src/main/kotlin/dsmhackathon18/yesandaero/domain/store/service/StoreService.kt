@@ -5,17 +5,27 @@ import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSummaryResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.entity.Menu
 import dsmhackathon18.yesandaero.domain.store.entity.Store
+import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.MenuRepository
 import dsmhackathon18.yesandaero.domain.store.repository.StoreRepository
+import dsmhackathon18.yesandaero.global.exception.InvalidRequestException
 import dsmhackathon18.yesandaero.global.util.GeoDistanceCalculator
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -126,6 +136,77 @@ class StoreService(
     }
 
     fun getCategories(): CategoryListResponse = CategoryListResponse.all()
+
+    @Transactional(readOnly = true)
+    fun listStores(
+        categories: List<StoreCategory>?,
+        maxPrice: Int?,
+        lat: Double?,
+        lng: Double?,
+        sort: StoreListSort?,
+        page: Int,
+        size: Int,
+    ): StoreListResponse {
+        if (maxPrice != null && maxPrice < 0) {
+            throw InvalidRequestException("maxPrice는 0 이상이어야 합니다")
+        }
+
+        val effectiveCategories = categories?.takeIf { it.isNotEmpty() } ?: StoreCategory.entries.toList()
+        val effectiveSort = sort ?: (if (lat != null && lng != null) StoreListSort.DISTANCE_ASC else null)
+
+        if (effectiveSort == StoreListSort.DISTANCE_ASC && (lat == null || lng == null)) {
+            throw InvalidRequestException("DISTANCE_ASC 정렬에는 lat, lng가 필요합니다")
+        }
+
+        val storePage: Page<Store> = when (effectiveSort) {
+            StoreListSort.PRICE_ASC -> storeRepository.findAllByFilters(
+                effectiveCategories,
+                maxPrice,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "avgPrice")),
+            )
+            StoreListSort.DISCOUNT_DESC -> storeRepository.findAllByFiltersOrderByDiscountDesc(
+                effectiveCategories,
+                maxPrice,
+                PageRequest.of(page, size),
+            )
+            StoreListSort.DISTANCE_ASC -> distanceSortedPage(
+                effectiveCategories,
+                maxPrice,
+                requireNotNull(lat),
+                requireNotNull(lng),
+                PageRequest.of(page, size),
+            )
+            null -> storeRepository.findAllByFilters(
+                effectiveCategories,
+                maxPrice,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")),
+            )
+        }
+
+        val content = storePage.content.map { store ->
+            val distance = GeoDistanceCalculator.calculate(lat, lng, store.latitude, store.longitude)
+            // TODO: coupon 도메인 완성 후 실제 사용 가능 쿠폰 보유 여부로 대체
+            StoreSummaryResponse.of(store, distance, hasUsableCoupon = false)
+        }
+
+        return StoreListResponse(content = content, page = storePage.number, totalPages = storePage.totalPages)
+    }
+
+    private fun distanceSortedPage(
+        categories: List<StoreCategory>,
+        maxPrice: Int?,
+        lat: Double,
+        lng: Double,
+        pageable: Pageable,
+    ): Page<Store> {
+        val sorted = storeRepository.findAllByFilters(categories, maxPrice)
+            .sortedBy { GeoDistanceCalculator.distanceMeters(lat, lng, it.latitude, it.longitude) }
+
+        val fromIndex = (pageable.pageNumber * pageable.pageSize).coerceAtMost(sorted.size)
+        val toIndex = (fromIndex + pageable.pageSize).coerceAtMost(sorted.size)
+
+        return PageImpl(sorted.subList(fromIndex, toIndex), pageable, sorted.size.toLong())
+    }
 
     private fun buildDetailResponse(store: Store, lat: Double?, lng: Double?): StoreDetailResponse {
         val menus = menuRepository.findByStoreIdOrderByDisplayOrderAsc(requireNotNull(store.id))

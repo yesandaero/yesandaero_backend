@@ -2,6 +2,7 @@ package dsmhackathon18.yesandaero.domain.store.service
 
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuRequest
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.entity.Menu
@@ -12,11 +13,17 @@ import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsExcept
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.MenuRepository
 import dsmhackathon18.yesandaero.domain.store.repository.StoreRepository
+import dsmhackathon18.yesandaero.global.exception.InvalidRequestException
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.junit.jupiter.api.Test
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.test.util.ReflectionTestUtils
 import java.time.LocalTime
 import java.util.Optional
@@ -284,6 +291,82 @@ class StoreServiceTest {
         )
         assertEquals("한식", response.categories.first { it.code == "KOREAN" }.label)
     }
+
+    @Test
+    fun `maxPrice가 음수이면 InvalidRequestException이 발생한다`() {
+        assertFailsWith<InvalidRequestException> {
+            storeService.listStores(null, -1000, null, null, null, 0, 20)
+        }
+    }
+
+    @Test
+    fun `DISTANCE_ASC 정렬인데 좌표가 없으면 InvalidRequestException이 발생한다`() {
+        assertFailsWith<InvalidRequestException> {
+            storeService.listStores(null, null, null, null, StoreListSort.DISTANCE_ASC, 0, 20)
+        }
+    }
+
+    @Test
+    fun `카테고리를 지정하지 않으면 전체 카테고리로 조회한다`() {
+        val categoriesSlot = slot<List<StoreCategory>>()
+        every {
+            storeRepository.findAllByFilters(capture(categoriesSlot), null, any<Pageable>())
+        } returns emptyPage()
+
+        storeService.listStores(null, null, null, null, StoreListSort.PRICE_ASC, 0, 20)
+
+        assertEquals(StoreCategory.entries.toSet(), categoriesSlot.captured.toSet())
+    }
+
+    @Test
+    fun `PRICE_ASC 정렬은 avgPrice 오름차순 페이지를 조회한다`() {
+        val pageableSlot = slot<Pageable>()
+        every {
+            storeRepository.findAllByFilters(listOf(StoreCategory.KOREAN), 10000, capture(pageableSlot))
+        } returns emptyPage()
+
+        storeService.listStores(listOf(StoreCategory.KOREAN), 10000, null, null, StoreListSort.PRICE_ASC, 0, 20)
+
+        assertEquals(Sort.by(Sort.Direction.ASC, "avgPrice"), pageableSlot.captured.sort)
+    }
+
+    @Test
+    fun `DISCOUNT_DESC 정렬은 할인율 정렬 전용 쿼리를 사용한다`() {
+        every {
+            storeRepository.findAllByFiltersOrderByDiscountDesc(StoreCategory.entries.toList(), null, any())
+        } returns emptyPage()
+
+        storeService.listStores(null, null, null, null, StoreListSort.DISCOUNT_DESC, 0, 20)
+
+        verify { storeRepository.findAllByFiltersOrderByDiscountDesc(StoreCategory.entries.toList(), null, any()) }
+    }
+
+    @Test
+    fun `정렬 조건과 좌표가 모두 없으면 createdAt 내림차순으로 조회한다`() {
+        val pageableSlot = slot<Pageable>()
+        every {
+            storeRepository.findAllByFilters(StoreCategory.entries.toList(), null, capture(pageableSlot))
+        } returns emptyPage()
+
+        storeService.listStores(null, null, null, null, null, 0, 20)
+
+        assertEquals(Sort.by(Sort.Direction.DESC, "createdAt"), pageableSlot.captured.sort)
+    }
+
+    @Test
+    fun `좌표만 있고 정렬 조건이 없으면 DISTANCE_ASC로 기본 정렬하고 거리 정보를 포함한다`() {
+        val near = existingStore()
+        every {
+            storeRepository.findAllByFilters(StoreCategory.entries.toList(), null)
+        } returns listOf(near)
+
+        val response = storeService.listStores(null, null, 36.3624, 127.3568, null, 0, 20)
+
+        assertEquals(1, response.content.size)
+        assertNotNull(response.content[0].distanceMeters)
+    }
+
+    private fun emptyPage(): Page<Store> = PageImpl(emptyList(), PageRequest.of(0, 20), 0)
 
     private fun existingStore(): Store =
         Store(

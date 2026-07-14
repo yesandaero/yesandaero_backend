@@ -4,13 +4,17 @@ import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSummaryResponse
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreAlreadyExistsException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.service.StoreService
+import dsmhackathon18.yesandaero.global.exception.InvalidRequestException
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
 import io.mockk.mockk
@@ -293,5 +297,51 @@ class StoreControllerTest {
             .andExpect(jsonPath("$.categories.length()").value(6))
             .andExpect(jsonPath("$.categories[0].code").value("KOREAN"))
             .andExpect(jsonPath("$.categories[0].label").value("한식"))
+    }
+
+    @Test
+    fun `가게 목록 조회에 성공하면 200과 목록을 반환한다`() {
+        every {
+            storeService.listStores(null, null, null, null, null, 0, 20)
+        } returns StoreListResponse(
+            content = listOf(
+                StoreSummaryResponse.of(
+                    Store(
+                        ownerUserId = 1L,
+                        name = "흔카페",
+                        category = StoreCategory.CAFE,
+                        address = "대전시 유성구",
+                        phone = null,
+                        avgPrice = 6000,
+                        description = null,
+                        latitude = 36.3624,
+                        longitude = 127.3568,
+                        openTime = LocalTime.of(8, 0),
+                        closeTime = LocalTime.of(22, 0),
+                        minOrderAmount = 5000,
+                    ).also { ReflectionTestUtils.setField(it, "id", 12L) },
+                    distance = null,
+                ),
+            ),
+            page = 0,
+            totalPages = 1,
+        )
+
+        mockMvc.perform(get("/stores"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content[0].storeId").value(12))
+            .andExpect(jsonPath("$.content[0].hasUsableCoupon").value(false))
+            .andExpect(jsonPath("$.totalPages").value(1))
+    }
+
+    @Test
+    fun `DISTANCE_ASC인데 좌표가 없으면 400과 GLB_400을 반환한다`() {
+        every {
+            storeService.listStores(null, null, null, null, StoreListSort.DISTANCE_ASC, 0, 20)
+        } throws InvalidRequestException("DISTANCE_ASC 정렬에는 lat, lng가 필요합니다")
+
+        mockMvc.perform(get("/stores").param("sort", "DISTANCE_ASC"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("GLB_400"))
     }
 }

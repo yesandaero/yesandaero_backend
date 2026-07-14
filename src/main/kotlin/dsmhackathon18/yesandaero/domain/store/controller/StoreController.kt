@@ -4,9 +4,12 @@ import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
+import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.service.StoreService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -44,6 +47,18 @@ class StoreController(
 
     @GetMapping("/categories")
     fun getCategories(): CategoryListResponse = storeService.getCategories()
+
+    @GetMapping
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun listStores(
+        @RequestParam(required = false) category: List<StoreCategory>?,
+        @RequestParam(required = false) maxPrice: Int?,
+        @RequestParam(required = false) lat: Double?,
+        @RequestParam(required = false) lng: Double?,
+        @RequestParam(required = false) sort: StoreListSort?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): StoreListResponse = storeService.listStores(category, maxPrice, lat, lng, sort, page, size)
 
     @GetMapping("/{storeId}")
     fun getStoreDetail(
