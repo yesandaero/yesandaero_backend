@@ -65,4 +65,52 @@ interface CouponRepository : JpaRepository<Coupon, Long> {
         @Param("storeIds") storeIds: List<Long>,
         @Param("now") now: LocalDateTime,
     ): List<Long>
+
+    @Query(
+        """
+        SELECT new dsmhackathon18.yesandaero.domain.coupon.repository.IssuedStatsRow(
+            COUNT(c),
+            COUNT(CASE WHEN c.registeredAt IS NOT NULL THEN 1 END),
+            COUNT(CASE WHEN c.status = dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus.USED THEN 1 END)
+        )
+        FROM Coupon c
+        WHERE c.issuerStoreId = :storeId AND c.issuedAt >= :from AND c.issuedAt < :to
+        """,
+    )
+    fun getIssuedStats(
+        @Param("storeId") storeId: Long,
+        @Param("from") from: LocalDateTime,
+        @Param("to") to: LocalDateTime,
+    ): IssuedStatsRow
+
+    @Query(
+        """
+        SELECT COUNT(c) FROM Coupon c
+        WHERE c.usedStoreId = :storeId
+        AND c.status = dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus.USED
+        AND c.usedAt >= :from AND c.usedAt < :to
+        """,
+    )
+    fun getRedeemedTotal(
+        @Param("storeId") storeId: Long,
+        @Param("from") from: LocalDateTime,
+        @Param("to") to: LocalDateTime,
+    ): Long
+
+    @Query(
+        """
+        SELECT new dsmhackathon18.yesandaero.domain.coupon.repository.IssuerStoreCountRow(c.issuerStoreId, COUNT(c))
+        FROM Coupon c
+        WHERE c.usedStoreId = :storeId
+        AND c.status = dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus.USED
+        AND c.usedAt >= :from AND c.usedAt < :to
+        GROUP BY c.issuerStoreId
+        ORDER BY COUNT(c) DESC
+        """,
+    )
+    fun getRedeemedByIssuerStore(
+        @Param("storeId") storeId: Long,
+        @Param("from") from: LocalDateTime,
+        @Param("to") to: LocalDateTime,
+    ): List<IssuerStoreCountRow>
 }
