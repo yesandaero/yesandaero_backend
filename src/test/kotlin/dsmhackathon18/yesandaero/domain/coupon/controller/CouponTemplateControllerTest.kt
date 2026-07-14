@@ -4,8 +4,10 @@ import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateCreateResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateListResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateResponse
 import dsmhackathon18.yesandaero.domain.coupon.entity.DiscountType
+import dsmhackathon18.yesandaero.domain.coupon.exception.TemplateAccessNotAllowedException
 import dsmhackathon18.yesandaero.domain.coupon.exception.TemplateNotFoundException
 import dsmhackathon18.yesandaero.domain.coupon.service.CouponTemplateService
+import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
 import io.mockk.mockk
@@ -126,7 +128,7 @@ class CouponTemplateControllerTest {
 
     @Test
     fun `내 템플릿 목록 조회에 성공하면 200을 반환한다`() {
-        every { couponTemplateService.listMyTemplates(1L, null) } returns CouponTemplateListResponse(
+        every { couponTemplateService.listTemplates(1L, null, null) } returns CouponTemplateListResponse(
             templates = listOf(
                 CouponTemplateResponse(3L, "아메리카노 1000원 할인", DiscountType.AMOUNT, 1000, 5000, 14, true),
             ),
@@ -135,5 +137,36 @@ class CouponTemplateControllerTest {
         mockMvc.perform(get("/coupon-templates"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.templates[0].templateId").value(3))
+    }
+
+    @Test
+    fun `ownerStoreId로 제휴 가게 템플릿 조회에 성공하면 200을 반환한다`() {
+        every { couponTemplateService.listTemplates(1L, 20L, true) } returns CouponTemplateListResponse(
+            templates = listOf(
+                CouponTemplateResponse(5L, "라떼 500원 할인", DiscountType.AMOUNT, 500, 3000, 7, true),
+            ),
+        )
+
+        mockMvc.perform(get("/coupon-templates").param("ownerStoreId", "20").param("active", "true"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.templates[0].templateId").value(5))
+    }
+
+    @Test
+    fun `ownerStoreId 가게와 제휴 상태가 아니면 403과 CPN_403_03을 반환한다`() {
+        every { couponTemplateService.listTemplates(1L, 20L, null) } throws TemplateAccessNotAllowedException()
+
+        mockMvc.perform(get("/coupon-templates").param("ownerStoreId", "20"))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("CPN_403_03"))
+    }
+
+    @Test
+    fun `ownerStoreId 가게가 없으면 404와 STR_404를 반환한다`() {
+        every { couponTemplateService.listTemplates(1L, 999L, null) } throws StoreNotFoundException()
+
+        mockMvc.perform(get("/coupon-templates").param("ownerStoreId", "999"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("STR_404"))
     }
 }

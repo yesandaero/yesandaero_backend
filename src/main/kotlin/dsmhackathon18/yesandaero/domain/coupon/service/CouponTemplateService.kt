@@ -6,8 +6,10 @@ import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateListResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateUpdateRequest
 import dsmhackathon18.yesandaero.domain.coupon.entity.CouponTemplate
+import dsmhackathon18.yesandaero.domain.coupon.exception.TemplateAccessNotAllowedException
 import dsmhackathon18.yesandaero.domain.coupon.exception.TemplateNotFoundException
 import dsmhackathon18.yesandaero.domain.coupon.repository.CouponTemplateRepository
+import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.StoreRepository
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional
 class CouponTemplateService(
     private val couponTemplateRepository: CouponTemplateRepository,
     private val storeRepository: StoreRepository,
+    private val partnershipRepository: PartnershipRepository,
 ) {
 
     @Transactional
@@ -57,16 +60,27 @@ class CouponTemplateService(
     }
 
     @Transactional(readOnly = true)
-    fun listMyTemplates(ownerUserId: Long, active: Boolean?): CouponTemplateListResponse {
+    fun listTemplates(ownerUserId: Long, ownerStoreId: Long?, active: Boolean?): CouponTemplateListResponse {
         val myStore = storeRepository.findByOwnerUserId(ownerUserId) ?: throw StoreNotFoundException()
         val myStoreId = requireNotNull(myStore.id)
 
-        val templates = if (active != null) {
-            couponTemplateRepository.findAllByStoreIdAndActive(myStoreId, active)
-        } else {
-            couponTemplateRepository.findAllByStoreId(myStoreId)
+        if (ownerStoreId == null || ownerStoreId == myStoreId) {
+            val templates = if (active != null) {
+                couponTemplateRepository.findAllByStoreIdAndActive(myStoreId, active)
+            } else {
+                couponTemplateRepository.findAllByStoreId(myStoreId)
+            }
+            return CouponTemplateListResponse(templates = templates.map(CouponTemplateResponse::of))
         }
 
+        // 제휴 가게의 템플릿은 활성 상태만 노출한다.
+        val partnerStore = storeRepository.findById(ownerStoreId).orElseThrow { StoreNotFoundException() }
+        val partnerStoreId = requireNotNull(partnerStore.id)
+        if (!partnershipRepository.existsAcceptedBetween(myStoreId, partnerStoreId)) {
+            throw TemplateAccessNotAllowedException()
+        }
+
+        val templates = couponTemplateRepository.findAllByStoreIdAndActive(partnerStoreId, true)
         return CouponTemplateListResponse(templates = templates.map(CouponTemplateResponse::of))
     }
 }

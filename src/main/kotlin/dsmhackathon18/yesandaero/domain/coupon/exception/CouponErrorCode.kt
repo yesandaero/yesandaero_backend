@@ -15,6 +15,7 @@ enum class CouponErrorCode(
     // 403
     ISSUE_NOT_ALLOWED(HttpStatus.FORBIDDEN, "CPN_403_01", "쿠폰 발급 권한이 없습니다"),
     NOT_COUPON_OWNER(HttpStatus.FORBIDDEN, "CPN_403_02", "본인의 쿠폰이 아닙니다"),
+    TEMPLATE_ACCESS_NOT_ALLOWED(HttpStatus.FORBIDDEN, "CPN_403_03", "해당 가게의 템플릿을 조회할 권한이 없습니다"),
 
     // 404
     TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "CPN_404_01", "존재하지 않는 쿠폰 템플릿입니다"),

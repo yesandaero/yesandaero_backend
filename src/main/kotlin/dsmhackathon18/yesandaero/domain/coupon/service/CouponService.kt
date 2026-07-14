@@ -49,14 +49,22 @@ class CouponService(
         val myStoreId = requireNotNull(myStore.id)
 
         val template = couponTemplateRepository.findById(request.templateId).orElseThrow { TemplateNotFoundException() }
-        if (template.storeId != myStoreId || !template.active) {
+        val isOwnTemplate = template.storeId == myStoreId
+        val isPartnerTemplate = !isOwnTemplate && partnershipRepository.existsAcceptedBetween(myStoreId, template.storeId)
+        if ((!isOwnTemplate && !isPartnerTemplate) || !template.active) {
             throw IssueNotAllowedException()
         }
 
         val targetStore = storeRepository.findById(request.targetStoreId).orElseThrow { StoreNotFoundException() }
         val targetStoreId = requireNotNull(targetStore.id)
 
-        if (!partnershipRepository.existsAcceptedBetween(myStoreId, targetStoreId)) {
+        // 본인 템플릿은 제휴 가게 어디서든 사용 가능하지만, 제휴 가게 템플릿은 그 가게에서만 사용 가능하다.
+        val isValidTarget = if (isOwnTemplate) {
+            partnershipRepository.existsAcceptedBetween(myStoreId, targetStoreId)
+        } else {
+            targetStoreId == template.storeId
+        }
+        if (!isValidTarget) {
             throw IssueNotAllowedException()
         }
 

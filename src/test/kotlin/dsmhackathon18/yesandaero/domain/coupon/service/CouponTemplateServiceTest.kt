@@ -4,8 +4,10 @@ import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateCreateRequest
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponTemplateUpdateRequest
 import dsmhackathon18.yesandaero.domain.coupon.entity.CouponTemplate
 import dsmhackathon18.yesandaero.domain.coupon.entity.DiscountType
+import dsmhackathon18.yesandaero.domain.coupon.exception.TemplateAccessNotAllowedException
 import dsmhackathon18.yesandaero.domain.coupon.exception.TemplateNotFoundException
 import dsmhackathon18.yesandaero.domain.coupon.repository.CouponTemplateRepository
+import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.exception.NotStoreOwnerException
@@ -26,7 +28,9 @@ class CouponTemplateServiceTest {
 
     private val couponTemplateRepository = mockk<CouponTemplateRepository>()
     private val storeRepository = mockk<StoreRepository>()
-    private val couponTemplateService = CouponTemplateService(couponTemplateRepository, storeRepository)
+    private val partnershipRepository = mockk<PartnershipRepository>()
+    private val couponTemplateService =
+        CouponTemplateService(couponTemplateRepository, storeRepository, partnershipRepository)
 
     private fun store(id: Long, ownerUserId: Long): Store =
         Store(
@@ -113,7 +117,7 @@ class CouponTemplateServiceTest {
         every { storeRepository.findByOwnerUserId(1L) } returns null
 
         assertFailsWith<StoreNotFoundException> {
-            couponTemplateService.listMyTemplates(1L, null)
+            couponTemplateService.listTemplates(1L, null, null)
         }
     }
 
@@ -122,7 +126,7 @@ class CouponTemplateServiceTest {
         every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
         every { couponTemplateRepository.findAllByStoreId(10L) } returns listOf(existingTemplate(10L))
 
-        val response = couponTemplateService.listMyTemplates(1L, null)
+        val response = couponTemplateService.listTemplates(1L, null, null)
 
         assertEquals(1, response.templates.size)
     }
@@ -132,7 +136,50 @@ class CouponTemplateServiceTest {
         every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
         every { couponTemplateRepository.findAllByStoreIdAndActive(10L, true) } returns listOf(existingTemplate(10L))
 
-        val response = couponTemplateService.listMyTemplates(1L, true)
+        val response = couponTemplateService.listTemplates(1L, null, true)
+
+        assertEquals(1, response.templates.size)
+    }
+
+    @Test
+    fun `ownerStoreId가 내 가게 id면 내 가게 템플릿을 반환한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { couponTemplateRepository.findAllByStoreId(10L) } returns listOf(existingTemplate(10L))
+
+        val response = couponTemplateService.listTemplates(1L, 10L, null)
+
+        assertEquals(1, response.templates.size)
+    }
+
+    @Test
+    fun `ownerStoreId 가게가 없으면 StoreNotFoundException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { storeRepository.findById(999L) } returns Optional.empty()
+
+        assertFailsWith<StoreNotFoundException> {
+            couponTemplateService.listTemplates(1L, 999L, null)
+        }
+    }
+
+    @Test
+    fun `ownerStoreId 가게와 제휴 상태가 아니면 TemplateAccessNotAllowedException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+        every { partnershipRepository.existsAcceptedBetween(10L, 20L) } returns false
+
+        assertFailsWith<TemplateAccessNotAllowedException> {
+            couponTemplateService.listTemplates(1L, 20L, null)
+        }
+    }
+
+    @Test
+    fun `ownerStoreId가 제휴 가게면 활성 템플릿만 반환한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+        every { partnershipRepository.existsAcceptedBetween(10L, 20L) } returns true
+        every { couponTemplateRepository.findAllByStoreIdAndActive(20L, true) } returns listOf(existingTemplate(20L))
+
+        val response = couponTemplateService.listTemplates(1L, 20L, false)
 
         assertEquals(1, response.templates.size)
     }

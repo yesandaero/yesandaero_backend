@@ -87,9 +87,10 @@ class CouponServiceTest {
     }
 
     @Test
-    fun `내 템플릿이 아니면 쿠폰 발급 시 IssueNotAllowedException이 발생한다`() {
+    fun `내 템플릿도 아니고 제휴 가게 템플릿도 아니면 쿠폰 발급 시 IssueNotAllowedException이 발생한다`() {
         every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
         every { couponTemplateRepository.findById(3L) } returns Optional.of(template(3L, storeId = 999L))
+        every { partnershipRepository.existsAcceptedBetween(10L, 999L) } returns false
 
         assertFailsWith<IssueNotAllowedException> {
             couponService.issueCoupon(1L, CouponIssueRequest(templateId = 3L, targetStoreId = 20L))
@@ -154,6 +155,49 @@ class CouponServiceTest {
         assertEquals(10L, savedSlot.captured.issuerStoreId)
         assertEquals(20L, savedSlot.captured.targetStoreId)
         verify { couponIssueTokenRepository.save(tokenSlot.captured, 101L, Duration.ofSeconds(600)) }
+    }
+
+    @Test
+    fun `제휴 가게의 활성 템플릿이면 그 가게를 사용처로 발급에 성공한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { couponTemplateRepository.findById(3L) } returns Optional.of(template(3L, storeId = 20L))
+        every { partnershipRepository.existsAcceptedBetween(10L, 20L) } returns true
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+        val savedSlot = slot<Coupon>()
+        every { couponRepository.save(capture(savedSlot)) } answers {
+            ReflectionTestUtils.setField(savedSlot.captured, "id", 102L)
+            savedSlot.captured
+        }
+        every { couponIssueTokenRepository.save(any(), 102L, Duration.ofSeconds(600)) } returns Unit
+
+        val response = couponService.issueCoupon(1L, CouponIssueRequest(templateId = 3L, targetStoreId = 20L))
+
+        assertEquals(102L, response.couponId)
+        assertEquals(10L, savedSlot.captured.issuerStoreId)
+        assertEquals(20L, savedSlot.captured.targetStoreId)
+    }
+
+    @Test
+    fun `제휴 가게의 비활성 템플릿이면 쿠폰 발급 시 IssueNotAllowedException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { couponTemplateRepository.findById(3L) } returns Optional.of(template(3L, storeId = 20L, active = false))
+        every { partnershipRepository.existsAcceptedBetween(10L, 20L) } returns true
+
+        assertFailsWith<IssueNotAllowedException> {
+            couponService.issueCoupon(1L, CouponIssueRequest(templateId = 3L, targetStoreId = 20L))
+        }
+    }
+
+    @Test
+    fun `제휴 가게 템플릿의 사용처가 템플릿 소유 가게와 다르면 IssueNotAllowedException이 발생한다`() {
+        every { storeRepository.findByOwnerUserId(1L) } returns store(10L, 1L)
+        every { couponTemplateRepository.findById(3L) } returns Optional.of(template(3L, storeId = 20L))
+        every { partnershipRepository.existsAcceptedBetween(10L, 20L) } returns true
+        every { storeRepository.findById(30L) } returns Optional.of(store(30L, 3L))
+
+        assertFailsWith<IssueNotAllowedException> {
+            couponService.issueCoupon(1L, CouponIssueRequest(templateId = 3L, targetStoreId = 30L))
+        }
     }
 
     // ===== registerCoupon =====
