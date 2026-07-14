@@ -402,6 +402,20 @@ class StoreServiceTest {
         assertEquals(false, response.truncated)
     }
 
+    @Test
+    fun `제휴 대상 가게를 검색하면 partnershipStatus가 NONE으로 고정된 결과를 반환한다`() {
+        val store = existingStore()
+        every {
+            storeRepository.searchForPartnership(1L, "흔", null, PageRequest.of(0, 20))
+        } returns PageImpl(listOf(store), PageRequest.of(0, 20), 1)
+
+        val response = storeService.searchStoresForPartnership(1L, "흔", null, 0, 20)
+
+        assertEquals(1, response.content.size)
+        assertEquals("NONE", response.content[0].partnershipStatus.name)
+        assertEquals(10L, response.content[0].storeId)
+    }
+
     private fun emptyPage(): Page<Store> = PageImpl(emptyList(), PageRequest.of(0, 20), 0)
 
     private fun existingStore(): Store =

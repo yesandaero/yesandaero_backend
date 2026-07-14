@@ -4,12 +4,15 @@ import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
+import dsmhackathon18.yesandaero.domain.store.dto.PartnershipStatus
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreMapResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSearchItemResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSearchListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreSummaryResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.entity.Menu
@@ -229,6 +232,29 @@ class StoreService(
         }
 
         return StoreMapResponse(stores = content, totalInBounds = totalInBounds, truncated = truncated)
+    }
+
+    @Transactional(readOnly = true)
+    fun searchStoresForPartnership(
+        ownerUserId: Long,
+        keyword: String,
+        category: StoreCategory?,
+        page: Int,
+        size: Int,
+    ): StoreSearchListResponse {
+        val storePage = storeRepository.searchForPartnership(ownerUserId, keyword, category, PageRequest.of(page, size))
+
+        val content = storePage.content.map { store ->
+            // TODO: partnership 도메인 완성 후 실제 제휴 상태로 대체
+            StoreSearchItemResponse(
+                storeId = requireNotNull(store.id),
+                name = store.name,
+                category = store.category,
+                partnershipStatus = PartnershipStatus.NONE,
+            )
+        }
+
+        return StoreSearchListResponse(content = content, page = storePage.number, totalPages = storePage.totalPages)
     }
 
     private fun distanceSortedPage(

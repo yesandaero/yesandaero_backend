@@ -3,11 +3,14 @@ package dsmhackathon18.yesandaero.domain.store.controller
 import dsmhackathon18.yesandaero.domain.store.dto.CategoryListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuBulkUpdateResponse
 import dsmhackathon18.yesandaero.domain.store.dto.MenuResponse
+import dsmhackathon18.yesandaero.domain.store.dto.PartnershipStatus
 import dsmhackathon18.yesandaero.domain.store.dto.StoreDetailResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreMapResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSearchItemResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSearchListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreSummaryResponse
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
@@ -371,6 +374,29 @@ class StoreControllerTest {
     @Test
     fun `지도 영역 조회 시 필수 좌표가 없으면 400과 GLB_400을 반환한다`() {
         mockMvc.perform(get("/stores/map").param("swLat", "36.0"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("GLB_400"))
+    }
+
+    @Test
+    fun `제휴 대상 가게 검색에 성공하면 200과 목록을 반환한다`() {
+        every {
+            storeService.searchStoresForPartnership(1L, "흔", null, 0, 20)
+        } returns StoreSearchListResponse(
+            content = listOf(StoreSearchItemResponse(12L, "흔카페", StoreCategory.CAFE, PartnershipStatus.NONE)),
+            page = 0,
+            totalPages = 1,
+        )
+
+        mockMvc.perform(get("/stores/search").param("keyword", "흔"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content[0].storeId").value(12))
+            .andExpect(jsonPath("$.content[0].partnershipStatus").value("NONE"))
+    }
+
+    @Test
+    fun `제휴 대상 가게 검색 시 keyword가 없으면 400과 GLB_400을 반환한다`() {
+        mockMvc.perform(get("/stores/search"))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("GLB_400"))
     }

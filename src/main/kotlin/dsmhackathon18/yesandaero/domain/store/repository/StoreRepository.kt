@@ -82,4 +82,19 @@ interface StoreRepository : JpaRepository<Store, Long> {
         @Param("categories") categories: List<StoreCategory>,
         @Param("maxPrice") maxPrice: Int?,
     ): List<Store>
+
+    @Query(
+        """
+        SELECT s FROM Store s
+        WHERE s.ownerUserId <> :ownerUserId
+        AND LOWER(s.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+        AND (:category IS NULL OR s.category = :category)
+        """,
+    )
+    fun searchForPartnership(
+        @Param("ownerUserId") ownerUserId: Long,
+        @Param("keyword") keyword: String,
+        @Param("category") category: StoreCategory?,
+        pageable: Pageable,
+    ): Page<Store>
 }

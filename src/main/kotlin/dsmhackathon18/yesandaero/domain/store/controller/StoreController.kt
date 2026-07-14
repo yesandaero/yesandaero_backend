@@ -9,6 +9,7 @@ import dsmhackathon18.yesandaero.domain.store.dto.StoreListSort
 import dsmhackathon18.yesandaero.domain.store.dto.StoreMapResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterRequest
 import dsmhackathon18.yesandaero.domain.store.dto.StoreRegisterResponse
+import dsmhackathon18.yesandaero.domain.store.dto.StoreSearchListResponse
 import dsmhackathon18.yesandaero.domain.store.dto.StoreUpdateRequest
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.service.StoreService
@@ -98,4 +99,14 @@ class StoreController(
         @PathVariable storeId: Long,
         @Valid @RequestBody request: MenuBulkUpdateRequest,
     ): MenuBulkUpdateResponse = storeService.replaceMenus(ownerUserId, storeId, request)
+
+    @GetMapping("/search")
+    @PreAuthorize("hasRole('OWNER')")
+    fun searchStoresForPartnership(
+        @AuthenticationPrincipal ownerUserId: Long,
+        @RequestParam keyword: String,
+        @RequestParam(required = false) category: StoreCategory?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): StoreSearchListResponse = storeService.searchStoresForPartnership(ownerUserId, keyword, category, page, size)
 }

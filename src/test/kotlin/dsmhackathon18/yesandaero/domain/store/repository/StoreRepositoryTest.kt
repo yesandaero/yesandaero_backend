@@ -128,4 +128,26 @@ class StoreRepositoryTest {
 
         assertEquals(listOf("박스안"), result.map { it.name })
     }
+
+    @Test
+    fun `제휴 검색은 키워드로 이름을 검색하고 자기 가게는 제외한다`() {
+        store(1L, "흔카페", StoreCategory.CAFE, 6000)
+        store(2L, "흔식당", StoreCategory.KOREAN, 8000)
+        store(3L, "다른가게", StoreCategory.CAFE, 6000)
+
+        val page = storeRepository.searchForPartnership(1L, "흔", null, PageRequest.of(0, 10))
+
+        assertEquals(listOf("흔식당"), page.content.map { it.name })
+    }
+
+    @Test
+    fun `제휴 검색에 카테고리를 지정하면 해당 카테고리만 조회한다`() {
+        store(1L, "본인가게", StoreCategory.CAFE, 6000)
+        store(2L, "카페가게", StoreCategory.CAFE, 6000)
+        store(3L, "식당가게", StoreCategory.KOREAN, 8000)
+
+        val page = storeRepository.searchForPartnership(1L, "가게", StoreCategory.CAFE, PageRequest.of(0, 10))
+
+        assertEquals(listOf("카페가게"), page.content.map { it.name })
+    }
 }
