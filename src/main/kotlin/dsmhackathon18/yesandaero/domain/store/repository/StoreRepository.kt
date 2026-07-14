@@ -50,7 +50,7 @@ interface StoreRepository : JpaRepository<Store, Long> {
                     THEN (CAST(m.price AS double) - m.discountedPrice) / m.price
                     ELSE 0.0
                 END
-            ) DESC
+            ) DESC, s.id DESC
         """,
         countQuery = """
             SELECT COUNT(s) FROM Store s
