@@ -160,7 +160,7 @@ class StoreControllerTest {
 
     @Test
     fun `가게 상세 조회에 성공하면 200과 가게 정보를 반환한다`() {
-        every { storeService.getStoreDetail(10L, null, null) } returns detailResponse()
+        every { storeService.getStoreDetail(10L, null, null, 1L) } returns detailResponse()
 
         mockMvc.perform(get("/stores/10"))
             .andExpect(status().isOk)
@@ -171,7 +171,7 @@ class StoreControllerTest {
 
     @Test
     fun `존재하지 않는 가게를 조회하면 404와 STR_404를 반환한다`() {
-        every { storeService.getStoreDetail(999L, null, null) } throws StoreNotFoundException()
+        every { storeService.getStoreDetail(999L, null, null, 1L) } throws StoreNotFoundException()
 
         mockMvc.perform(get("/stores/999"))
             .andExpect(status().isNotFound)
@@ -352,7 +352,7 @@ class StoreControllerTest {
     @Test
     fun `지도 영역 내 가게 조회에 성공하면 200과 목록을 반환한다`() {
         every {
-            storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null)
+            storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null, 1L)
         } returns StoreMapResponse(
             stores = emptyList(),
             totalInBounds = 0,

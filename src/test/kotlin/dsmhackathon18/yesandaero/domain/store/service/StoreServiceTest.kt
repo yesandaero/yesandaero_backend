@@ -1,5 +1,6 @@
 package dsmhackathon18.yesandaero.domain.store.service
 
+import dsmhackathon18.yesandaero.domain.coupon.repository.CouponRepository
 import dsmhackathon18.yesandaero.domain.partnership.entity.Partnership
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus as PartnershipEntityStatus
 import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
@@ -41,7 +42,8 @@ class StoreServiceTest {
     private val storeRepository = mockk<StoreRepository>()
     private val menuRepository = mockk<MenuRepository>()
     private val partnershipRepository = mockk<PartnershipRepository>()
-    private val storeService = StoreService(storeRepository, menuRepository, partnershipRepository)
+    private val couponRepository = mockk<CouponRepository>()
+    private val storeService = StoreService(storeRepository, menuRepository, partnershipRepository, couponRepository)
 
     private fun registerRequest(menus: List<MenuRequest> = emptyList()) = StoreRegisterRequest(
         name = "시흔식당",
@@ -117,7 +119,7 @@ class StoreServiceTest {
         every { storeRepository.findById(999L) } returns Optional.empty()
 
         assertFailsWith<StoreNotFoundException> {
-            storeService.getStoreDetail(999L, lat = null, lng = null)
+            storeService.getStoreDetail(999L, lat = null, lng = null, userId = 1L)
         }
     }
 
@@ -126,8 +128,9 @@ class StoreServiceTest {
         val store = existingStore()
         every { storeRepository.findById(10L) } returns Optional.of(store)
         every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+        every { couponRepository.countUsable(1L, 10L, any()) } returns 0L
 
-        val response = storeService.getStoreDetail(10L, lat = null, lng = null)
+        val response = storeService.getStoreDetail(10L, lat = null, lng = null, userId = 1L)
 
         assertNull(response.distanceMeters)
         assertNull(response.walkingMinutes)
@@ -139,11 +142,24 @@ class StoreServiceTest {
         val store = existingStore()
         every { storeRepository.findById(10L) } returns Optional.of(store)
         every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+        every { couponRepository.countUsable(1L, 10L, any()) } returns 0L
 
-        val response = storeService.getStoreDetail(10L, lat = 36.3624, lng = 127.3568)
+        val response = storeService.getStoreDetail(10L, lat = 36.3624, lng = 127.3568, userId = 1L)
 
         assertNotNull(response.distanceMeters)
         assertNotNull(response.walkingMinutes)
+    }
+
+    @Test
+    fun `가게 상세 조회 시 사용 가능한 쿠폰 개수를 포함한다`() {
+        val store = existingStore()
+        every { storeRepository.findById(10L) } returns Optional.of(store)
+        every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+        every { couponRepository.countUsable(1L, 10L, any()) } returns 3L
+
+        val response = storeService.getStoreDetail(10L, lat = null, lng = null, userId = 1L)
+
+        assertEquals(3, response.usableCouponCount)
     }
 
     @Test
@@ -160,6 +176,7 @@ class StoreServiceTest {
         val store = existingStore()
         every { storeRepository.findByOwnerUserId(1L) } returns store
         every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+        every { couponRepository.countUsable(1L, 10L, any()) } returns 0L
 
         val response = storeService.getMyStore(1L)
 
@@ -191,6 +208,7 @@ class StoreServiceTest {
         val store = existingStore()
         every { storeRepository.findById(10L) } returns Optional.of(store)
         every { menuRepository.findByStoreIdOrderByDisplayOrderAsc(10L) } returns emptyList()
+        every { couponRepository.countUsable(1L, 10L, any()) } returns 0L
 
         val response = storeService.updateStore(
             1L,
@@ -380,7 +398,7 @@ class StoreServiceTest {
     @Test
     fun `바운딩 박스가 뒤집혀 있으면 InvalidRequestException이 발생한다`() {
         assertFailsWith<InvalidRequestException> {
-            storeService.getStoresInBounds(36.5, 127.5, 36.0, 127.0, null, null, 100, null, null)
+            storeService.getStoresInBounds(36.5, 127.5, 36.0, 127.0, null, null, 100, null, null, userId = 1L)
         }
     }
 
@@ -392,8 +410,9 @@ class StoreServiceTest {
         every {
             storeRepository.findAllInBoundingBox(36.0, 127.0, 36.5, 127.5, StoreCategory.entries.toList(), null)
         } returns stores
+        every { couponRepository.findTargetStoreIdsWithUsableCoupon(1L, any(), any()) } returns emptyList()
 
-        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 2, null, null)
+        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 2, null, null, userId = 1L)
 
         assertEquals(3, response.totalInBounds)
         assertEquals(2, response.stores.size)
@@ -405,11 +424,25 @@ class StoreServiceTest {
         every {
             storeRepository.findAllInBoundingBox(36.0, 127.0, 36.5, 127.5, StoreCategory.entries.toList(), null)
         } returns listOf(existingStore())
+        every { couponRepository.findTargetStoreIdsWithUsableCoupon(1L, any(), any()) } returns emptyList()
 
-        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null)
+        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null, userId = 1L)
 
         assertEquals(1, response.totalInBounds)
         assertEquals(false, response.truncated)
+    }
+
+    @Test
+    fun `바운딩 박스 조회 시 쿠폰 사용 가능한 가게는 hasUsableCoupon이 true다`() {
+        val store = otherStore(20L)
+        every {
+            storeRepository.findAllInBoundingBox(36.0, 127.0, 36.5, 127.5, StoreCategory.entries.toList(), null)
+        } returns listOf(store)
+        every { couponRepository.findTargetStoreIdsWithUsableCoupon(1L, listOf(20L), any()) } returns listOf(20L)
+
+        val response = storeService.getStoresInBounds(36.0, 127.0, 36.5, 127.5, null, null, 100, null, null, userId = 1L)
+
+        assertTrue(response.stores[0].hasUsableCoupon)
     }
 
     @Test
