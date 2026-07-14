@@ -8,7 +8,10 @@ import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipListResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipStatusResponse
 import dsmhackathon18.yesandaero.domain.partnership.entity.Partnership
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus
+import dsmhackathon18.yesandaero.domain.partnership.exception.InvalidPartnershipStatusException
+import dsmhackathon18.yesandaero.domain.partnership.exception.NotPartnershipPartyException
 import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipAlreadyExistsException
+import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipNotFoundException
 import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
 import dsmhackathon18.yesandaero.domain.store.repository.StoreRepository
@@ -95,6 +98,38 @@ class PartnershipService(
         }
 
         return PartnershipListResponse(partnerships = items)
+    }
+
+    @Transactional
+    fun acceptPartnership(ownerUserId: Long, partnershipId: Long): PartnershipStatusResponse {
+        val partnership = partnershipRepository.findById(partnershipId).orElseThrow { PartnershipNotFoundException() }
+        val receiverStore = storeRepository.findById(partnership.receiverStoreId).orElseThrow { StoreNotFoundException() }
+
+        if (receiverStore.ownerUserId != ownerUserId) {
+            throw NotPartnershipPartyException()
+        }
+        if (partnership.status != PartnershipStatus.PENDING) {
+            throw InvalidPartnershipStatusException()
+        }
+
+        partnership.accept()
+        return PartnershipStatusResponse.of(partnership)
+    }
+
+    @Transactional
+    fun rejectPartnership(ownerUserId: Long, partnershipId: Long): PartnershipStatusResponse {
+        val partnership = partnershipRepository.findById(partnershipId).orElseThrow { PartnershipNotFoundException() }
+        val receiverStore = storeRepository.findById(partnership.receiverStoreId).orElseThrow { StoreNotFoundException() }
+
+        if (receiverStore.ownerUserId != ownerUserId) {
+            throw NotPartnershipPartyException()
+        }
+        if (partnership.status != PartnershipStatus.PENDING) {
+            throw InvalidPartnershipStatusException()
+        }
+
+        partnership.reject()
+        return PartnershipStatusResponse.of(partnership)
     }
 
     private fun partnerStoreId(partnership: Partnership, myStoreId: Long): Long =

@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -37,4 +39,18 @@ class PartnershipController(
         @AuthenticationPrincipal ownerUserId: Long,
         @RequestParam(required = false) status: PartnershipStatus?,
     ): PartnershipListResponse = partnershipService.listPartnerships(ownerUserId, status)
+
+    @PatchMapping("/{partnershipId}/accept")
+    @PreAuthorize("hasRole('OWNER')")
+    fun acceptPartnership(
+        @AuthenticationPrincipal ownerUserId: Long,
+        @PathVariable partnershipId: Long,
+    ): PartnershipStatusResponse = partnershipService.acceptPartnership(ownerUserId, partnershipId)
+
+    @PatchMapping("/{partnershipId}/reject")
+    @PreAuthorize("hasRole('OWNER')")
+    fun rejectPartnership(
+        @AuthenticationPrincipal ownerUserId: Long,
+        @PathVariable partnershipId: Long,
+    ): PartnershipStatusResponse = partnershipService.rejectPartnership(ownerUserId, partnershipId)
 }

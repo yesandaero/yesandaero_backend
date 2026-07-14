@@ -7,7 +7,10 @@ import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipItemResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipListResponse
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipStatusResponse
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus
+import dsmhackathon18.yesandaero.domain.partnership.exception.InvalidPartnershipStatusException
+import dsmhackathon18.yesandaero.domain.partnership.exception.NotPartnershipPartyException
 import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipAlreadyExistsException
+import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipNotFoundException
 import dsmhackathon18.yesandaero.domain.partnership.service.PartnershipService
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.domain.store.exception.StoreNotFoundException
@@ -24,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -138,5 +142,66 @@ class PartnershipControllerTest {
         mockMvc.perform(get("/partnerships").param("status", "ACCEPTED"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.partnerships.length()").value(0))
+    }
+
+    @Test
+    fun `제휴 수락에 성공하면 200과 ACCEPTED, acceptedAt을 반환한다`() {
+        every { partnershipService.acceptPartnership(1L, 5L) } returns PartnershipStatusResponse(
+            partnershipId = 5L,
+            status = PartnershipStatus.ACCEPTED,
+            acceptedAt = LocalDateTime.of(2026, 7, 13, 11, 0),
+        )
+
+        mockMvc.perform(patch("/partnerships/5/accept"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("ACCEPTED"))
+            .andExpect(jsonPath("$.acceptedAt").exists())
+    }
+
+    @Test
+    fun `당사자가 아니면 수락 시 403과 PTN_403을 반환한다`() {
+        every { partnershipService.acceptPartnership(1L, 5L) } throws NotPartnershipPartyException()
+
+        mockMvc.perform(patch("/partnerships/5/accept"))
+            .andExpect(status().isForbidden)
+            .andExpect(jsonPath("$.code").value("PTN_403"))
+    }
+
+    @Test
+    fun `PENDING이 아니면 수락 시 409와 PTN_409_02를 반환한다`() {
+        every { partnershipService.acceptPartnership(1L, 5L) } throws InvalidPartnershipStatusException()
+
+        mockMvc.perform(patch("/partnerships/5/accept"))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("PTN_409_02"))
+    }
+
+    @Test
+    fun `존재하지 않는 제휴를 수락하면 404와 PTN_404를 반환한다`() {
+        every { partnershipService.acceptPartnership(1L, 999L) } throws PartnershipNotFoundException()
+
+        mockMvc.perform(patch("/partnerships/999/accept"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("PTN_404"))
+    }
+
+    @Test
+    fun `제휴 거절에 성공하면 200과 REJECTED를 반환한다`() {
+        every { partnershipService.rejectPartnership(1L, 5L) } returns
+            PartnershipStatusResponse(partnershipId = 5L, status = PartnershipStatus.REJECTED, acceptedAt = null)
+
+        mockMvc.perform(patch("/partnerships/5/reject"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("REJECTED"))
+            .andExpect(jsonPath("$.acceptedAt").doesNotExist())
+    }
+
+    @Test
+    fun `PENDING이 아니면 거절 시 409와 PTN_409_02를 반환한다`() {
+        every { partnershipService.rejectPartnership(1L, 5L) } throws InvalidPartnershipStatusException()
+
+        mockMvc.perform(patch("/partnerships/5/reject"))
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("PTN_409_02"))
     }
 }

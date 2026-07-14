@@ -4,7 +4,10 @@ import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipCreateRequest
 import dsmhackathon18.yesandaero.domain.partnership.dto.PartnershipDirection
 import dsmhackathon18.yesandaero.domain.partnership.entity.Partnership
 import dsmhackathon18.yesandaero.domain.partnership.entity.PartnershipStatus
+import dsmhackathon18.yesandaero.domain.partnership.exception.InvalidPartnershipStatusException
+import dsmhackathon18.yesandaero.domain.partnership.exception.NotPartnershipPartyException
 import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipAlreadyExistsException
+import dsmhackathon18.yesandaero.domain.partnership.exception.PartnershipNotFoundException
 import dsmhackathon18.yesandaero.domain.partnership.repository.PartnershipRepository
 import dsmhackathon18.yesandaero.domain.store.entity.Store
 import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
@@ -21,6 +24,7 @@ import java.time.LocalTime
 import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 
 class PartnershipServiceTest {
 
@@ -182,6 +186,94 @@ class PartnershipServiceTest {
 
         assertEquals(1, response.partnerships.size)
         assertEquals(2L, response.partnerships[0].partnershipId)
+    }
+
+    @Test
+    fun `제휴가 존재하지 않으면 수락 시 PartnershipNotFoundException이 발생한다`() {
+        every { partnershipRepository.findById(5L) } returns Optional.empty()
+
+        assertFailsWith<PartnershipNotFoundException> {
+            partnershipService.acceptPartnership(1L, 5L)
+        }
+    }
+
+    @Test
+    fun `수신 가게 소유주가 아니면 수락 시 NotPartnershipPartyException이 발생한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.PENDING)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 999L))
+
+        assertFailsWith<NotPartnershipPartyException> {
+            partnershipService.acceptPartnership(1L, 1L)
+        }
+    }
+
+    @Test
+    fun `PENDING이 아니면 수락 시 InvalidPartnershipStatusException이 발생한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.ACCEPTED)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        assertFailsWith<InvalidPartnershipStatusException> {
+            partnershipService.acceptPartnership(2L, 1L)
+        }
+    }
+
+    @Test
+    fun `제휴 수락에 성공하면 ACCEPTED로 전이하고 acceptedAt을 기록한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.PENDING)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        val response = partnershipService.acceptPartnership(2L, 1L)
+
+        assertEquals(PartnershipStatus.ACCEPTED, response.status)
+        assertEquals(PartnershipStatus.ACCEPTED, partnership.status)
+        assertEquals(partnership.acceptedAt, response.acceptedAt)
+        assertNotNull(response.acceptedAt)
+    }
+
+    @Test
+    fun `제휴가 존재하지 않으면 거절 시 PartnershipNotFoundException이 발생한다`() {
+        every { partnershipRepository.findById(5L) } returns Optional.empty()
+
+        assertFailsWith<PartnershipNotFoundException> {
+            partnershipService.rejectPartnership(1L, 5L)
+        }
+    }
+
+    @Test
+    fun `수신 가게 소유주가 아니면 거절 시 NotPartnershipPartyException이 발생한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.PENDING)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 999L))
+
+        assertFailsWith<NotPartnershipPartyException> {
+            partnershipService.rejectPartnership(1L, 1L)
+        }
+    }
+
+    @Test
+    fun `PENDING이 아니면 거절 시 InvalidPartnershipStatusException이 발생한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.TERMINATED)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        assertFailsWith<InvalidPartnershipStatusException> {
+            partnershipService.rejectPartnership(2L, 1L)
+        }
+    }
+
+    @Test
+    fun `제휴 거절에 성공하면 REJECTED로 전이한다`() {
+        val partnership = existingPartnership(10L, 20L, PartnershipStatus.PENDING)
+        every { partnershipRepository.findById(1L) } returns Optional.of(partnership)
+        every { storeRepository.findById(20L) } returns Optional.of(store(20L, 2L))
+
+        val response = partnershipService.rejectPartnership(2L, 1L)
+
+        assertEquals(PartnershipStatus.REJECTED, response.status)
+        assertEquals(null, response.acceptedAt)
     }
 
     private fun existingPartnership(
