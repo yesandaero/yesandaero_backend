@@ -6,6 +6,9 @@ import dsmhackathon18.yesandaero.domain.coupon.dto.CouponRegisterRequest
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponRegisterResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponStoreResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponUseResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponWalletItemResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponWalletResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponWalletStoreResponse
 import dsmhackathon18.yesandaero.domain.coupon.entity.Coupon
 import dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus
 import dsmhackathon18.yesandaero.domain.coupon.exception.CouponAlreadyRegisteredException
@@ -128,5 +131,49 @@ class CouponService(
             status = CouponStatus.USED,
             usedAt = now,
         )
+    }
+
+    @Transactional
+    fun listMyCoupons(userId: Long, status: CouponStatus?): CouponWalletResponse {
+        // 조회 시점 기준 만료된 REGISTERED 쿠폰을 먼저 EXPIRED로 전이한다.
+        couponRepository.expireOverdueCoupons(userId, LocalDateTime.now())
+
+        val coupons = if (status != null) {
+            couponRepository.findAllByUserIdAndStatus(userId, status)
+        } else {
+            couponRepository.findAllByUserId(userId)
+        }
+
+        val storeIds = coupons.map { it.targetStoreId }.distinct()
+        val stores = if (storeIds.isEmpty()) {
+            emptyMap()
+        } else {
+            storeRepository.findAllById(storeIds).associateBy { requireNotNull(it.id) }
+        }
+
+        val templateIds = coupons.map { it.templateId }.distinct()
+        val templates = if (templateIds.isEmpty()) {
+            emptyMap()
+        } else {
+            couponTemplateRepository.findAllById(templateIds).associateBy { requireNotNull(it.id) }
+        }
+
+        val items = coupons.mapNotNull { coupon ->
+            val store = stores[coupon.targetStoreId] ?: return@mapNotNull null
+            val template = templates[coupon.templateId] ?: return@mapNotNull null
+            CouponWalletItemResponse(
+                couponId = requireNotNull(coupon.id),
+                name = template.name,
+                store = CouponWalletStoreResponse(
+                    storeId = requireNotNull(store.id),
+                    name = store.name,
+                    category = store.category,
+                ),
+                status = coupon.status,
+                expiresAt = requireNotNull(coupon.expiresAt),
+            )
+        }
+
+        return CouponWalletResponse(coupons = items)
     }
 }

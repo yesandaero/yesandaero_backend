@@ -4,6 +4,9 @@ import dsmhackathon18.yesandaero.domain.coupon.dto.CouponIssueResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponRegisterResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponStoreResponse
 import dsmhackathon18.yesandaero.domain.coupon.dto.CouponUseResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponWalletItemResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponWalletResponse
+import dsmhackathon18.yesandaero.domain.coupon.dto.CouponWalletStoreResponse
 import dsmhackathon18.yesandaero.domain.coupon.entity.CouponStatus
 import dsmhackathon18.yesandaero.domain.coupon.entity.DiscountType
 import dsmhackathon18.yesandaero.domain.coupon.exception.CouponAlreadyRegisteredException
@@ -12,6 +15,7 @@ import dsmhackathon18.yesandaero.domain.coupon.exception.InvalidCouponTokenExcep
 import dsmhackathon18.yesandaero.domain.coupon.exception.IssueNotAllowedException
 import dsmhackathon18.yesandaero.domain.coupon.exception.NotCouponOwnerException
 import dsmhackathon18.yesandaero.domain.coupon.service.CouponService
+import dsmhackathon18.yesandaero.domain.store.entity.StoreCategory
 import dsmhackathon18.yesandaero.global.exception.handler.GlobalExceptionHandler
 import io.mockk.every
 import io.mockk.mockk
@@ -24,6 +28,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -185,5 +190,36 @@ class CouponControllerTest {
         mockMvc.perform(post("/coupons/101/use"))
             .andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("CPN_409_02"))
+    }
+
+    @Test
+    fun `내 쿠폰함 조회에 성공하면 200과 목록을 반환한다`() {
+        authenticateAs("CUSTOMER")
+        every { couponService.listMyCoupons(1L, null) } returns CouponWalletResponse(
+            coupons = listOf(
+                CouponWalletItemResponse(
+                    couponId = 101L,
+                    name = "아메리카노 1000원 할인",
+                    store = CouponWalletStoreResponse(20L, "흔카페", StoreCategory.CAFE),
+                    status = CouponStatus.REGISTERED,
+                    expiresAt = LocalDateTime.of(2026, 7, 27, 23, 59, 59),
+                ),
+            ),
+        )
+
+        mockMvc.perform(get("/coupons/me"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.coupons[0].couponId").value(101))
+            .andExpect(jsonPath("$.coupons[0].store.category").value("CAFE"))
+    }
+
+    @Test
+    fun `내 쿠폰함 조회 시 status 쿼리로 필터링한다`() {
+        authenticateAs("CUSTOMER")
+        every { couponService.listMyCoupons(1L, CouponStatus.USED) } returns CouponWalletResponse(coupons = emptyList())
+
+        mockMvc.perform(get("/coupons/me").param("status", "USED"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.coupons.length()").value(0))
     }
 }

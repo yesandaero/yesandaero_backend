@@ -273,6 +273,57 @@ class CouponServiceTest {
         assertEquals(DiscountType.AMOUNT, response.discountType)
     }
 
+    // ===== listMyCoupons =====
+
+    @Test
+    fun `내 쿠폰함 조회 시 만료 지난 쿠폰을 먼저 EXPIRED로 전이한다`() {
+        every { couponRepository.expireOverdueCoupons(5L, any()) } returns 1
+        every { couponRepository.findAllByUserId(5L) } returns emptyList()
+
+        couponService.listMyCoupons(5L, null)
+
+        verify { couponRepository.expireOverdueCoupons(5L, any()) }
+    }
+
+    @Test
+    fun `status 필터 없이 조회하면 내 쿠폰 전체를 반환한다`() {
+        every { couponRepository.expireOverdueCoupons(5L, any()) } returns 0
+        val coupon = existingCoupon(CouponStatus.REGISTERED, userId = 5L, expiresAt = LocalDateTime.now().plusDays(1))
+        every { couponRepository.findAllByUserId(5L) } returns listOf(coupon)
+        every { storeRepository.findAllById(listOf(20L)) } returns listOf(store(20L, 2L))
+        every { couponTemplateRepository.findAllById(listOf(3L)) } returns listOf(template(3L, storeId = 10L))
+
+        val response = couponService.listMyCoupons(5L, null)
+
+        assertEquals(1, response.coupons.size)
+        assertEquals(20L, response.coupons[0].store.storeId)
+        assertEquals("아메리카노 1000원 할인", response.coupons[0].name)
+    }
+
+    @Test
+    fun `status 필터로 조회하면 해당 상태의 쿠폰만 조회한다`() {
+        every { couponRepository.expireOverdueCoupons(5L, any()) } returns 0
+        every { couponRepository.findAllByUserIdAndStatus(5L, CouponStatus.USED) } returns emptyList()
+
+        val response = couponService.listMyCoupons(5L, CouponStatus.USED)
+
+        assertEquals(0, response.coupons.size)
+        verify { couponRepository.findAllByUserIdAndStatus(5L, CouponStatus.USED) }
+    }
+
+    @Test
+    fun `가게 또는 템플릿 정보를 찾을 수 없는 쿠폰은 목록에서 제외한다`() {
+        every { couponRepository.expireOverdueCoupons(5L, any()) } returns 0
+        val coupon = existingCoupon(CouponStatus.REGISTERED, userId = 5L, expiresAt = LocalDateTime.now().plusDays(1))
+        every { couponRepository.findAllByUserId(5L) } returns listOf(coupon)
+        every { storeRepository.findAllById(listOf(20L)) } returns emptyList()
+        every { couponTemplateRepository.findAllById(listOf(3L)) } returns listOf(template(3L, storeId = 10L))
+
+        val response = couponService.listMyCoupons(5L, null)
+
+        assertEquals(0, response.coupons.size)
+    }
+
     private fun existingCoupon(
         status: CouponStatus,
         userId: Long? = null,
